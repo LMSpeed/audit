@@ -22,7 +22,7 @@ for (const line of sums.trim().split('\n')) {
     expected
   );
 }
-const directory = await mkdtemp(join(tmpdir(), 'audit-portable-'));
+const directory = await mkdtemp(join(tmpdir(), 'audit portable-'));
 try {
   const archive = join(
     output,
@@ -83,12 +83,13 @@ try {
     await relay.close();
   }
   if (process.platform === 'win32') {
-    const result = await exec('cmd.exe', [
-      '/d',
-      '/s',
-      '/c',
-      `"${join(directory, 'lmspeed-audit/lmspeed-audit.cmd')}" --version`,
-    ]);
+    const result = await exec(
+      'cmd.exe',
+      ['/d', '/c', 'lmspeed-audit.cmd', '--version'],
+      {
+        cwd: join(directory, 'lmspeed-audit'),
+      }
+    );
     assert.equal(result.stdout.trim(), ENGINE_VERSION);
   }
   process.stdout.write(
