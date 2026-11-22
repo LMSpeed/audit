@@ -56,6 +56,13 @@ try {
   if (process.platform === 'win32')
     await exec('tar', ['-xf', archive, '-C', directory]);
   else await exec('tar', ['-xzf', archive, '-C', directory]);
+  // Then all translated guides and their local links survive portable packaging.
+  const documentationRoot = join(directory, 'lmspeed-audit');
+  for (const guide of ['README.md', 'README.zh-CN.md', 'README.ru.md']) {
+    const content = await readFile(join(documentationRoot, guide), 'utf8');
+    for (const [, path] of content.matchAll(/\]\(\.\/([^\s)#]+)(?:#[^)]*)?\)/g))
+      await readFile(join(documentationRoot, path!));
+  }
   const cli = join(directory, 'lmspeed-audit/lmspeed-audit.mjs');
   // When the user runs the portable command outside any Node.js project.
   const version = await exec(process.execPath, [cli, '--version'], {

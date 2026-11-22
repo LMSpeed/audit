@@ -79,6 +79,10 @@ try {
   for (const file of [
     'README.md',
     'README.zh-CN.md',
+    'README.ru.md',
+    'CHANGELOG.md',
+    'CHANGELOG.zh-CN.md',
+    'CHANGELOG.ru.md',
     'LICENSE',
     'NOTICE',
     'THIRD_PARTY_NOTICES.md',

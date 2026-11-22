@@ -6,12 +6,12 @@
 
 [![CI](https://github.com/lmspeed/audit/actions/workflows/ci.yml/badge.svg)](https://github.com/lmspeed/audit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](./package.json)
-[![Engine](https://img.shields.io/badge/Engine-0.3.3-0969da.svg)](./package.json)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](https://github.com/lmspeed/audit/blob/main/package.json)
+[![Engine](https://img.shields.io/badge/Engine-0.3.3-0969da.svg)](https://github.com/lmspeed/audit/blob/main/package.json)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [Русский](./README.ru.md)
 
-[Features](#features) · [Quick Start](#quick-start) · [Installation](#installation) · [Try Online](https://lmspeed.net/audit) · [Preview](#preview) · [Feature Reference](#complete-probe--feature-reference) · [Methodology](#methodology--evidence-boundaries) · [Credits](#credits) · [License](#license)
+[Features](#features) · [Quick Start](#quick-start) · [Installation](#installation) · [Try Online](https://lmspeed.net/audit) · [Preview](#preview) · [Feature Reference](#complete-probe--feature-reference) · [Methodology](#methodology--evidence-boundaries) · [Documentation](#documentation--languages) · [Credits](#credits) · [License](#license)
 
 </div>
 
@@ -432,6 +432,20 @@ flowchart LR
 2. **Execution vs. Verdict Separation** — HTTP auth errors (`401`/`403`), rate limits (`429`), unsupported media/configs, incomplete telemetry, and uncalibrated references become `blocked`, `unsupported`, `skipped`, or `inconclusive` rather than silent passes or false findings.
 3. **Holdout & Statistical Restraint** — Behavioral baselines require matching `protocol` and `generation` contracts, freshness (`<= maxAgeDays`), independent validation holdouts, and minimum separation margins; tokenizer checks guard against baseline drift via paired empty-prompt probes and a `0.99` posterior threshold.
 4. **Verification Suite (`pnpm check`)** — Runs TypeScript compilation, Biome formatting/linting, strict `tsc --noEmit`, AST test-governance checks (`no-mock`, `given-when-then`, `user ` scenario names), Vitest suites executing against real loopback HTTP relays with a **70% branch coverage threshold**, and package boundary checks (`pnpm verify:package`). Automated tests verify implementation contracts over loopback HTTP; live first-party model accuracy is not claimed without external reference calibration. See [`docs/acceptance.md`](./docs/acceptance.md) and [`docs/strategy-review.md`](./docs/strategy-review.md).
+
+---
+
+## Documentation & Languages
+
+| Document | English | 简体中文 | Русский |
+| :--- | :--- | :--- | :--- |
+| User guide | [English](./README.md) | [简体中文](./README.zh-CN.md) | [Русский](./README.ru.md) |
+| Acceptance scenarios | [English](./docs/acceptance.md) | [简体中文](./docs/acceptance.zh-CN.md) | [Русский](./docs/acceptance.ru.md) |
+| Strategy & evidence limits | [English](./docs/strategy-review.md) | [简体中文](./docs/strategy-review.zh-CN.md) | [Русский](./docs/strategy-review.ru.md) |
+| Publishing & installation channels | [English](./docs/releasing.md) | [简体中文](./docs/releasing.zh-CN.md) | [Русский](./docs/releasing.ru.md) |
+| Changelog | [English](./CHANGELOG.md) | [简体中文](./CHANGELOG.zh-CN.md) | [Русский](./CHANGELOG.ru.md) |
+
+Documentation is available in three languages. Commands, probe IDs, schema fields and status values are identical across guides; translated documentation does not change the CLI output language.
 
 ---
 

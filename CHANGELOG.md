@@ -1,5 +1,7 @@
 # Changelog
 
+[English](./CHANGELOG.md) · [简体中文](./CHANGELOG.zh-CN.md) · [Русский](./CHANGELOG.ru.md)
+
 ## 0.3.3 - 2026-11-22
 
 ### Improvements

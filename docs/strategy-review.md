@@ -1,5 +1,7 @@
 # Detection strategy and evidence limits
 
+[English](./strategy-review.md) · [简体中文](./strategy-review.zh-CN.md) · [Русский](./strategy-review.ru.md)
+
 This document summarizes the detection boundaries, statistical controls, and evidence limits of `@lmspeed/audit` (`0.3.0`). Supported wire contracts follow the public WHATWG Server-Sent Events, OpenAI Chat Completions and Responses APIs, and Anthropic Messages API specifications.
 
 Capability checks exercise actual tool envelopes, negative tool controls, strict schemas and generated media. No tools execute. Context checks use random facts and repeated confirmation of misses. Conditional injection compares balanced ordinary/sensitive controls; a refusal alone is not a finding.

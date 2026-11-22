@@ -1,5 +1,7 @@
 # Detection acceptance scenarios
 
+[English](./acceptance.md) · [简体中文](./acceptance.zh-CN.md) · [Русский](./acceptance.ru.md)
+
 Automated scenarios exercise the public audit entrypoint through a real loopback HTTP server. The server implements documented protocol behavior; it is not evidence of live model accuracy. Independently authenticated provider contracts and model-identification accuracy remain unverified.
 
 - Given a declared tool and a forced call, when a user audits tools, then wrong names, invalid arguments and calls returned while tools are disabled are findings. Tools are never executed.
@@ -29,3 +31,8 @@ Automated scenarios exercise the public audit entrypoint through a real loopback
 - Given multiple channel namespaces, when response headers are inspected, then conflicting hints are ambiguous. Generic CDN headers and response ID formats do not identify a channel.
 - Given five successful requests, when latency is measured, then descriptive statistics are reported without inherited stable/bimodal/routing thresholds.
 - Given a failed request, cancellation or a spent resource budget, when remaining checks run, then missing evidence cannot become a pass or leak credentials through progress/report callbacks.
+
+## Documentation distribution
+
+- Given a clean installation from the actual publishable tarball, when a user opens the English, Simplified Chinese or Russian README, then every guide, linked local document and preview image is available.
+- Given an extracted portable archive, when a user reads its documentation, then the same three-language guides, acceptance scenarios, evidence limits, publishing instructions and changelogs are available without fetching the source repository.

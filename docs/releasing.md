@@ -1,5 +1,7 @@
 # Publishing lmspeed-audit
 
+[English](./releasing.md) · [简体中文](./releasing.zh-CN.md) · [Русский](./releasing.ru.md)
+
 Stable `vX.Y.Z` tags run `.github/workflows/release.yml`. The tag must match `package.json` and `ENGINE_VERSION`. The workflow verifies the package, installs its tarball in a clean consumer, and checks the portable command on Linux, macOS and Windows with Node.js 22 and 24 before publishing downloads. Releases are immutable; retries reuse their original files.
 
 When no bootstrap token is configured, the npm job verifies the GitHub-to-npm OIDC exchange even when the version already exists. This checks that the trusted publisher is still usable without creating another public version. Exchanged credentials are never printed or persisted.
@@ -21,7 +23,7 @@ git tag vX.Y.Z
 git push origin main vX.Y.Z
 ```
 
-Update both changelogs before tagging. To retry registry publication or installer updates, dispatch `release.yml` with the existing tag; successful registry versions are skipped. Do not replace an existing release asset or tag. For packaging fixes after publication, increment both the package and engine versions and publish a new tag.
+Update all three changelogs (English, Simplified Chinese and Russian) before tagging. To retry registry publication or installer updates, dispatch `release.yml` with the existing tag; successful registry versions are skipped. Do not replace an existing release asset or tag. For packaging fixes after publication, increment both the package and engine versions and publish a new tag.
 
 The package homepage, registry metadata, installer homepages and READMEs lead back to [LMSpeed's online audit](https://lmspeed.net/audit). LMSpeed links to the repository and installation channels from its audit methodology section.
 

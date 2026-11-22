@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -49,14 +49,21 @@ afterAll(async () => {
 });
 
 describe('user installs the published CLI without the source repository', () => {
-  it('user receives both language guides and their preview image', async () => {
+  it('user receives all three language guides with working local documentation links', async () => {
     // Given a clean installation from the actual publishable tarball.
     const root = join(installation, 'node_modules/@lmspeed/audit');
     // When the user opens the documentation shipped with the package.
+    const guides = ['README.md', 'README.zh-CN.md', 'README.ru.md'];
     const files = await readdir(root);
-    // Then translated instructions and the linked preview remain available.
-    expect(files).toContain('README.zh-CN.md');
-    expect(files).toContain('assets');
+    // Then no translation or linked document is missing from the actual tarball.
+    expect(files).toEqual(expect.arrayContaining(guides));
+    for (const guide of guides) {
+      const content = await readFile(join(root, guide), 'utf8');
+      for (const [, path] of content.matchAll(
+        /\]\(\.\/([^\s)#]+)(?:#[^)]*)?\)/g
+      ))
+        await readFile(join(root, path!));
+    }
     expect(await readdir(join(root, 'assets'))).toContain('readme-preview.png');
   });
 

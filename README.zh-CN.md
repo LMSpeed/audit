@@ -6,12 +6,12 @@
 
 [![CI](https://github.com/lmspeed/audit/actions/workflows/ci.yml/badge.svg)](https://github.com/lmspeed/audit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](./package.json)
-[![Engine](https://img.shields.io/badge/Engine-0.3.3-0969da.svg)](./package.json)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](https://github.com/lmspeed/audit/blob/main/package.json)
+[![Engine](https://img.shields.io/badge/Engine-0.3.3-0969da.svg)](https://github.com/lmspeed/audit/blob/main/package.json)
 
-[English](./README.md) · [简体中文](./README.zh-CN.md)
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [Русский](./README.ru.md)
 
-[核心特性](#核心特性) · [快速上手](#快速上手) · [在线测试](https://lmspeed.net/zh/audit) · [效果预览](#效果预览) · [完整功能参考](#完整功能与探针参考) · [方法论与证据边界](#方法论与证据边界) · [致谢](#致谢) · [许可证](#许可证)
+[核心特性](#核心特性) · [快速上手](#快速上手) · [安装](#安装) · [在线测试](https://lmspeed.net/zh/audit) · [效果预览](#效果预览) · [完整功能参考](#完整功能与探针参考) · [方法论与证据边界](#方法论与证据边界) · [文档与语言](#文档与语言) · [致谢](#致谢) · [许可证](#许可证)
 
 </div>
 
@@ -121,7 +121,7 @@ pnpm add @lmspeed/audit
 
 [GitHub Releases](https://github.com/lmspeed/audit/releases/latest) 提供 `.tar.gz`、`.zip` 和 `SHA256SUMS`。便携包包含已构建的命令、运行依赖、文档与许可声明。核对校验和后解压，运行 `node lmspeed-audit/lmspeed-audit.mjs --help`，Windows 也可运行 `lmspeed-audit.cmd`。无需安装依赖，但仍需 Node.js。
 
-免安装可直接使用 [LMSpeed 在线审计](https://lmspeed.net/zh/audit)、[LLM 测速](https://lmspeed.net/zh/speed) 与[服务商目录](https://lmspeed.net/zh/provider)。维护者可查看[发布与安装渠道维护文档](./docs/releasing.md)。
+免安装可直接使用 [LMSpeed 在线审计](https://lmspeed.net/zh/audit)、[LLM 测速](https://lmspeed.net/zh/speed) 与[服务商目录](https://lmspeed.net/zh/provider)。维护者可查看[发布与安装渠道维护文档](./docs/releasing.zh-CN.md)。
 
 ### 从源码安装与构建
 
@@ -431,7 +431,21 @@ flowchart LR
 1. **防 SSRF 与凭据零泄露** — `validateTarget` 在每次出站前解析主机地址并校验 IPv4/IPv6 公网合法性，直接连接解析 IP 且关闭 HTTP 重定向；序列化报告和 stderr 异常输出都会剔除所有输入密钥及敏感 URL/配置赋值。
 2. **执行状态与判定解耦** — 将鉴权拦截、限流、未启用功能、缺少细分计费字段及过期参照分别标记为 `blocked`、`unsupported`、`skipped` 或 `inconclusive`，避免误判。
 3. **统计学克制与留出检验** — 行为分布指纹要求协议/生成参数严格一致、独立留出校验与有效间距阈值；分词器检测包含前后空提示词漂移检查和 `0.99` 后验停止条件。
-4. **本地工程验证（`pnpm check`）** — 依次执行 TypeScript 编译、Biome 代码规范检查、严格类型检查、AST 测试治理检查（禁止 mock、强制 `Given/When/Then` 与 `user ` 用户场景命名）、基于真实回环 HTTP 的 Vitest 测试套件（要求 `>= 70%` 分支覆盖率）及包边界验证 `pnpm verify:package`。自动测试针对真实回环服务端校验契约实现，一手线上模型识别准确率需由使用方配合校准基线另行评估。参见 [`docs/acceptance.md`](./docs/acceptance.md) 与 [`docs/strategy-review.md`](./docs/strategy-review.md)。
+4. **本地工程验证（`pnpm check`）** — 依次执行 TypeScript 编译、Biome 代码规范检查、严格类型检查、AST 测试治理检查（禁止 mock、强制 `Given/When/Then` 与 `user ` 用户场景命名）、基于真实回环 HTTP 的 Vitest 测试套件（要求 `>= 70%` 分支覆盖率）及包边界验证 `pnpm verify:package`。自动测试针对真实回环服务端校验契约实现，一手线上模型识别准确率需由使用方配合校准基线另行评估。参见[检测验收场景](./docs/acceptance.zh-CN.md)与[检测策略与证据限制](./docs/strategy-review.zh-CN.md)。
+
+---
+
+## 文档与语言
+
+| 文档 | English | 简体中文 | Русский |
+| :--- | :--- | :--- | :--- |
+| 使用指南 | [English](./README.md) | [简体中文](./README.zh-CN.md) | [Русский](./README.ru.md) |
+| 验收场景 | [English](./docs/acceptance.md) | [简体中文](./docs/acceptance.zh-CN.md) | [Русский](./docs/acceptance.ru.md) |
+| 检测策略与证据边界 | [English](./docs/strategy-review.md) | [简体中文](./docs/strategy-review.zh-CN.md) | [Русский](./docs/strategy-review.ru.md) |
+| 发布与安装渠道 | [English](./docs/releasing.md) | [简体中文](./docs/releasing.zh-CN.md) | [Русский](./docs/releasing.ru.md) |
+| 更新日志 | [English](./CHANGELOG.md) | [简体中文](./CHANGELOG.zh-CN.md) | [Русский](./CHANGELOG.ru.md) |
+
+文档提供英、简中、俄三种语言。命令、探针 ID、Schema 字段和状态值在各语言中保持一致；文档翻译不改变 CLI 的输出语言。
 
 ---
 
