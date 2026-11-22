@@ -1,8 +1,8 @@
 class LmspeedAudit < Formula
   desc "Evidence-based LLM API and relay auditing"
   homepage "https://lmspeed.net/audit"
-  url "https://github.com/lmspeed/audit/releases/download/v0.3.2/lmspeed-audit-0.3.2.tar.gz"
-  sha256 "0649c1ed9b864790fa40b39a0856a1938352d9aa24962fd4fa6c552a67197d7f"
+  url "https://github.com/lmspeed/audit/releases/download/v0.3.3/lmspeed-audit-0.3.3.tar.gz"
+  sha256 "3d3e9d8955807a30464deebbb09d0f5c13703d5a4f08b25adf86950c36ede5af"
   license "Apache-2.0"
 
   depends_on "node"

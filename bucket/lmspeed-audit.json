@@ -1,11 +1,11 @@
 {
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Evidence-based LLM API and relay auditing",
   "homepage": "https://lmspeed.net/audit",
   "license": "Apache-2.0",
   "depends": "nodejs-lts",
-  "url": "https://github.com/lmspeed/audit/releases/download/v0.3.2/lmspeed-audit-0.3.2.zip",
-  "hash": "ad56d14b68a01b874b44cf6fe96c1d56bc344b0cb92faed213893ba0d944c535",
+  "url": "https://github.com/lmspeed/audit/releases/download/v0.3.3/lmspeed-audit-0.3.3.zip",
+  "hash": "04fbc7e075347074509b13bc35895e6676cd6ddc5d2ceac2d684e6117739d7d9",
   "extract_dir": "lmspeed-audit",
   "bin": [["lmspeed-audit.cmd", "lmspeed-audit"]],
   "checkver": {
