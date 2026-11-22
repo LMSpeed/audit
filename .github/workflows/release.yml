@@ -107,7 +107,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -123,7 +123,7 @@ jobs:
           name: release
           path: .cache/release
       - name: Verify npm trusted publisher
-        if: env.NODE_AUTH_TOKEN == ''
+        if: env.NPM_BOOTSTRAP_TOKEN == ''
         run: |
           node --input-type=module <<'JS'
           const request = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
@@ -179,11 +179,17 @@ jobs:
       - name: Publish GitHub npm package
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${RELEASE_TAG#v}"
-          if ! pnpm view "@nexmoe/lmspeed-audit@$VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
-            pnpm publish ".cache/release/nexmoe-lmspeed-audit-$VERSION.tgz" --registry=https://npm.pkg.github.com --access public --no-git-checks --ignore-scripts
+          export VERSION
+          if gh api --paginate --slurp /users/nexmoe/packages/npm/lmspeed-audit/versions > .cache/github-package-versions.json; then
+            if node --input-type=module -e "import { readFileSync } from 'node:fs'; const pages = JSON.parse(readFileSync('.cache/github-package-versions.json', 'utf8')); process.exit(pages.flat().some(version => version.name === process.env.VERSION) ? 0 : 1);"; then
+              echo "GitHub Packages $VERSION is already published"
+              exit 0
+            fi
           fi
+          pnpm publish ".cache/release/nexmoe-lmspeed-audit-$VERSION.tgz" --registry=https://npm.pkg.github.com --access public --no-git-checks --ignore-scripts
 
   installers:
     needs: release
