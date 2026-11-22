@@ -1,6 +1,6 @@
 # LMSpeed Audit
 
-Canonical repository: https://github.com/lmspeed/audit. Both npm registries use `@lmspeed/audit`; the command remains `lmspeed-audit`.
+Canonical repository: https://github.com/lmspeed/audit. Keep the repository name `audit` lowercase to match the validated npm OIDC publisher; identity changes must update that binding and pass the CI authentication check. Both npm registries use `@lmspeed/audit`; the command remains `lmspeed-audit`.
 
 ## Development
 

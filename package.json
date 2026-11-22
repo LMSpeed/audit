@@ -115,7 +115,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LMSpeed/Audit.git"
+    "url": "git+https://github.com/LMSpeed/audit.git"
   },
   "publishConfig": {
     "access": "public"
