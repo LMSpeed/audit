@@ -28,7 +28,7 @@ describe('user uses number fingerprints as closed-set screening', () => {
     // When the user runs screening through the shared bounded transport.
     const report = await runAudit(
       {
-        target: { baseUrl, modelId: 'test-model' },
+        target: { baseUrl, modelId: 'a' },
         apiKey: 'local-key',
         probes: ['numeric_fingerprint'],
         numericFingerprint: { dataDirectory: directory, detectorSha256 },

@@ -1,5 +1,10 @@
 import { readdir, readFile } from 'node:fs/promises';
+import { loadDetector } from 'lmfpd-sdk';
 import { ENGINE_VERSION } from '../src/engine.js';
+import {
+  loadBundledNumericReference,
+  loadBundledTokenizerReference,
+} from '../src/identity/bundled-references.js';
 
 const manifest = JSON.parse(await readFile('package.json', 'utf8')) as {
   version: string;
@@ -50,6 +55,9 @@ const visit = async (directory: string): Promise<void> => {
 };
 await visit('src');
 await visit('dist');
+const bundledNumeric = await loadBundledNumericReference();
+await loadDetector({ source: bundledNumeric.configuration.dataDirectory });
+await loadBundledTokenizerReference();
 const thirdParty = await readFile('THIRD_PARTY_NOTICES.md', 'utf8');
 if (
   !thirdParty.includes('MIT License') ||

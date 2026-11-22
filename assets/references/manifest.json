@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "owner": "LMSpeed/audit",
+  "version": "ikale-70159b7536a2",
+  "source": {
+    "repository": "Ikaleio/lm-detector",
+    "commit": "70159b7536a2ceb55c478c8c9472da81d3627e59",
+    "license": "MIT"
+  },
+  "maximumAgeDays": {
+    "numeric": 30,
+    "tokenizer": 90
+  },
+  "files": {
+    "unified_bank.json": {
+      "sha256": "f4f8da2c10496551c26758d89537499c88037faed93ddc5dfedae1bb8f11cda1",
+      "bytes": 8651
+    },
+    "shared_detector.bin": {
+      "sha256": "a55d4bb275b09b630d9deeeac5a119077869a40dc65132ffff0ab87e58b7c9e9",
+      "bytes": 5443668
+    },
+    "tokenizer_bank.json": {
+      "sha256": "6dbf15a693deabfc36c4dfab9da64e9cdeee518f54eecf9cc69567ff5af26723",
+      "bytes": 78722
+    }
+  }
+}

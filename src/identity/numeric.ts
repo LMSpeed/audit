@@ -8,6 +8,7 @@ import {
   requestCompletion,
 } from '../protocols/completion.js';
 import type { AuditInput } from '../schema/index.js';
+import { loadBundledNumericReference } from './bundled-references.js';
 
 export async function probeNumericFingerprint(
   input: AuditInput,
@@ -16,6 +17,7 @@ export async function probeNumericFingerprint(
   const id = 'numeric_fingerprint';
   const started = performance.now();
   let acquired = 0;
+  let reference: Record<string, string> | undefined;
   const abstain = (
     reason: string,
     observations: Record<string, unknown> = {}
@@ -23,20 +25,31 @@ export async function probeNumericFingerprint(
     result(
       id,
       started,
-      { decision: 'abstain', reason, acquired, ...observations },
+      {
+        decision: 'abstain',
+        reason,
+        acquired,
+        ...(reference ? { reference } : {}),
+        ...observations,
+      },
       [],
       acquired > 0 ? 'completed' : 'skipped',
       true
     );
-  const config = input.numericFingerprint;
-  if (!config)
-    return result(
-      id,
-      started,
-      { decision: 'abstain', reason: 'numeric_reference_required' },
-      [],
-      'unsupported'
-    );
+  let config = input.numericFingerprint;
+  if (!config && input.referenceData !== 'disabled') {
+    try {
+      const bundled = await loadBundledNumericReference();
+      config = bundled.configuration;
+      reference = bundled.provenance;
+    } catch (error) {
+      return abstain('bundled_numeric_reference_unavailable', {
+        error:
+          error instanceof Error ? error.message : 'Reference loading failed',
+      });
+    }
+  }
+  if (!config) return abstain('numeric_reference_required');
   if (
     !isAbsolute(config.dataDirectory) ||
     !/^[a-f0-9]{64}$/.test(config.detectorSha256)
@@ -58,7 +71,27 @@ export async function probeNumericFingerprint(
       builtAt > Date.now() + 300000 ||
       Date.now() - builtAt > (config.maximumAgeDays ?? 30) * 86400000
     )
-      return abstain('stale_numeric_reference');
+      return abstain('stale_numeric_reference', {
+        builtAt: detector.builtAt,
+        maximumAgeDays: config.maximumAgeDays ?? 30,
+      });
+    const bank = JSON.parse(
+      await readFile(join(config.dataDirectory, 'unified_bank.json'), 'utf8')
+    ) as { models: Array<{ id: string; response_count: number }> };
+    const modelId = input.target.modelId
+      .trim()
+      .toLowerCase()
+      .replace(/^.*\//, '')
+      .replace(/:.*$/, '');
+    if (
+      !bank.models.some(
+        (model) =>
+          model.id.toLowerCase() === modelId && model.response_count > 0
+      )
+    )
+      return abstain('numeric_model_reference_missing', {
+        modelId: input.target.modelId,
+      });
     const challenges = generateChallenges();
     const outputs = [];
     for (const challenge of challenges) {
@@ -98,6 +131,7 @@ export async function probeNumericFingerprint(
         calibration: analysis.calibration,
         detectorSha256: config.detectorSha256,
         builtAt: detector.builtAt,
+        ...(reference ? { reference } : {}),
         attribution:
           'Closed-set ranking only. Unlisted models may rank highly; no identity pass or model-substitution finding is issued.',
       },

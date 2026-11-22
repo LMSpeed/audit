@@ -508,7 +508,10 @@ export async function requestCompletion(
       return fail(
         unsupported ? 'unsupported' : 'http_error',
         response.status,
-        String(error.type ?? error.code ?? 'request_failed')
+        [error.type ?? error.code ?? 'request_failed', error.message]
+          .filter((value) => typeof value === 'string')
+          .join(': ')
+          .slice(0, 512)
       );
     }
     const isStream =

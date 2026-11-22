@@ -34,5 +34,14 @@ export function redactRelayAuditText(text: string) {
       `${key}${separator}[redacted-url]`
   );
 
+  redacted = redacted.replace(
+    /\b(DATABASE_URL|CLIENT_SECRET|ACCESS_TOKEN|PASSWORD)\b(\s*[:=]\s*)([^\s"',}]+)/gi,
+    '$1$2[redacted]'
+  );
+  redacted = redacted.replace(
+    /([a-z][a-z0-9+.-]*:\/\/)[^\s/@"']+:[^\s/@"']+@/gi,
+    '$1[redacted]@'
+  );
+
   return redacted;
 }

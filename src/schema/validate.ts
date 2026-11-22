@@ -8,6 +8,11 @@ const positive = (
   value === undefined ||
   (Number.isSafeInteger(value) && value >= minimum && value <= maximum);
 export function validateDetectorConfiguration(input: AuditInput) {
+  if (
+    input.referenceData !== undefined &&
+    !['bundled', 'disabled'].includes(input.referenceData)
+  )
+    throw new Error('Invalid reference data mode');
   const generation = input.generation;
   if (
     generation &&

@@ -192,6 +192,8 @@ const report = await runAudit(
 console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 ```
 
+判定由库内部完成。提取拒绝识别兼容英文弯引号及中文、俄文拒绝表达；空 JSON 提取结果记为信息项，含糊回答仍保留无法判断。语义型 yes/no 任务允许句末标点，要求精确字面的任务继续严格比较。对未决检测，可从 `@lmspeed/audit/assessment` 导入 `getAuditInconclusiveReason` 取得供翻译的机器原因码。消费端应保留引擎判定，不在展示层另行改写。
+
 ---
 
 ## 效果预览
@@ -207,7 +209,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 {
   "schemaVersion": "1",
   "engineVersion": "0.3.0",
-  "rulesetVersion": "independent-2026-11-22.1",
+  "rulesetVersion": "independent-2026-11-23.1",
   "target": {
     "baseUrl": "http://127.0.0.1:57215/v1",
     "modelId": "claude-sonnet-4-6",
@@ -284,7 +286,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | 档位（`profile`） | 默认启用的探针 | 适用场景 |
 | :--- | :--- | :--- |
 | `connectivity` | `model_list`、`stream_integrity` | 快速验证端点可达性、鉴权、模型目录与 SSE 流格式 |
-| `general` *(默认)* | 全部 17 项自动探针（覆盖端点、提示词安全、完整性与质量），不包含 `web3_prompt_injection` 及需额外配置的可选探针 | 日常标准中转契约与安全审计 |
+| `general` *(默认)* | 19 项自动探针，包含使用随包数据的数字指纹与分词器旁证；不包含 `web3_prompt_injection` 及其他需配置的可选探针 | 日常标准中转契约与安全审计 |
 | `web3` | `general` 集合 + `web3_prompt_injection` + 已配置的可选探针 | 在常规审计基础上增加钱包助记词/私钥保护策略校验 |
 | `full` | 同类自动探针 + `web3_prompt_injection` + 全部已配置的能力/参照探针（`tokenBaselines`、`vision`、`pdf`、`context`、`reference`、`identity`、`numericFingerprint`、`tokenizer`） | 结合完整本地配置的深度审计 |
 
@@ -301,9 +303,9 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 
 | 探针 ID | 触发方式 | 检测内容与证据边界 |
 | :--- | :--- | :--- |
-| `infrastructure_recon` | 自动 | 检查入口 HTTP 可达性、状态码与 `content-type`；不执行 DNS、证书链或域名所有权审计 |
+| `infrastructure_recon` | 自动 | 采集入口可达性、DNS 地址/CNAME/NS、TLS 证书详情和有界 WHOIS 注册信息；未获取的证据单独记录 |
 | `model_list` | 自动 / `connectivity` | 请求 `GET /models` 的 `data[]` 目录并核对目标 `modelId` 是否在声明列表中 |
-| `infrastructure_fingerprint` | 自动 | 发送短响应测试并记录有限的非识别性响应头线索 |
+| `infrastructure_fingerprint` | 自动 | 对照入口、模型目录和错误路径中的 New API、One API、LiteLLM、One Hub、LobeChat、FastGPT 及常见前置代理特征；可修改的品牌信息不证明真实上游 |
 | `channel_classifier` | 自动 | 识别显式响应头前缀（`cf-aig-`、`x-amzn-bedrock-`、`anthropic-ratelimit-`），缺失或冲突时判为 `inconclusive` |
 
 #### 2. 提示词与注入安全（`prompt_security`）
@@ -311,8 +313,8 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | 探针 ID | 触发方式 | 检测内容与证据边界 |
 | :--- | :--- | :--- |
 | `token_injection` | 可选（`capabilities.tokenBaselines`） | 比对 `plain`、`system`、`question` 模板下的实报输入 Token 数与校准值（`reported_input_count_mismatch`） |
-| `prompt_extraction` | 自动 | 在系统指令中注入随机生成的 `PRIVATE_*` 受保护值，检查是否直接泄漏原文或 Base64 编码（`protected_value_disclosed`） |
-| `jailbreak_identity` | 自动 | 以 JSON 与 Base64 格式请求输出随机受保护值，检验指令边界泄漏 |
+| `prompt_extraction` | 自动 | 逐字复述、翻译和 JSON 续写，加随机受保护值对照；逐项保留提示词、响应与判定 |
+| `jailbreak_identity` | 自动 | 系统诊断、Base64 和中间件角色扮演，加随机 JSON/Base64 受保护值挑战 |
 | `conditional_injection` | 自动 | 随机顺序执行 3 组“普通账户 vs 敏感账户”对照任务，检测是否仅在敏感任务中异常泄漏 `DECOY_*` 与外发 `https://` 引导 |
 | `web3_prompt_injection` | `web3` / `full` | 使用结构化 JSON 验证面对要求上传助记词的诱导是否返回拒绝策略（`{"action":"reject"}`） |
 
@@ -322,11 +324,15 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | :--- | :--- | :--- |
 | `instruction_conflict` | 自动 | 系统消息要求精确返回随机 `ACK_*`，用户消息要求忽略前文计算乘法，检测优先级服从性（`system_priority_mismatch`） |
 | `stream_integrity` | 自动 / `connectivity` | 校验 SSE 事件结构、终结符（`[DONE]` / `message_stop` / `response.completed`）、流式模型名一致与用量单调递增 |
-| `context_window` | 自动 *（依赖配置）* | 若配置 `context.sizes` 或 `contextWindowTokens`，则以 `Math.min(16384, tokens * 2)` 进行有限召回抽样；未配置则报 `unsupported` |
+| `context_window` | 自动 | 未配置长度时自动倍增并二分细化：最多 12 次请求、524,288 输入字符、4,096 字符精度；显式长度配置保留定点召回抽测。认证、限流和偶发异常不作为容量边界 |
 | `context_recall` | 可选（`context`） | 在默认 `[0, 0.25, 0.5, 0.75, 1]` 等位置埋入随机 `FACT_*` 标记并在漏检时复核一次，确认 `context_recall_missing` |
 | `model_fingerprint` | 可选（`identity`） | 与经过验证的留出基线比对输出分布；样本不足、过期、配置不兼容或间隔不够时拒判 |
-| `numeric_fingerprint` | 可选（`numericFingerprint`） | 校验本地 `shared_detector.bin` SHA-256 与有效期（`1–90` 天，默认 `30`），借助 `lmfpd-sdk` 输出封闭集候选排序 |
-| `tokenizer_fingerprint` | 可选（`tokenizer`） | 使用外部 MIT `TokenizerBank` 进行自适应贝叶斯后验测试（阈值 `0.99`），首尾空提示词发生计数漂移时拒判 |
+| `numeric_fingerprint` | 自动；支持 `numericFingerprint` 覆盖 | 使用随包、SHA-256 固定的参考数据进行封闭集排序，有效期 30 天；运行时不下载数据 |
+| `tokenizer_fingerprint` | 自动；支持 `tokenizer` 覆盖 | 使用随包固定分词器库，有效期 90 天，最多 12 条自适应探针加首尾两次对照；漂移或不确定时拒判 |
+
+参考数据由本包独立管理和随版本交付。SDK、CLI 与 LMSpeed 读取同一份只读 `assets/references` 快照，保留来源提交、原始日期、哈希和 MIT 署名。显式 `numericFingerprint`、`tokenizer` 配置优先；SDK 或配置 JSON 中设置 `referenceData: 'disabled'` 可关闭自动参考检测。过期、缺失或损坏的数据明确标记为未验证，不在运行时下载替代数据，不阻塞其他检测。模型分布复核仍需独立校准的 `identity` 基线。
+
+维护者更新 `references.source.json` 中经过复核的上游提交与 Git blob 哈希，再运行 `pnpm references:sync`。仅维护阶段下载，验证来源文件和兼容性，只保留评分元数据、检测器与分词器库。将快照提交后通过本仓库现有 CI 发布。参见[参考数据维护](./docs/references.md)。
 
 #### 4. 响应完整性与稳定性（`response_integrity_stability`）
 

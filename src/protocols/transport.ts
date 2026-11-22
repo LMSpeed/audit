@@ -4,11 +4,12 @@ import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import { checkServerIdentity } from 'node:tls';
 import type { AuditOptions } from '../schema/index.js';
+import { createTokenUsageCounter } from './token-usage.js';
 
 export function isPublicAddress(address: string) {
   const ip = address.toLowerCase().replace(/^::ffff:/, '');
   if (isIP(ip) === 4) {
-    const [a = 0, b = 0] = ip.split('.').map(Number);
+    const [a = 0, b = 0, c = 0] = ip.split('.').map(Number);
     return !(
       a === 0 ||
       a === 10 ||
@@ -17,7 +18,9 @@ export function isPublicAddress(address: string) {
       (a === 100 && b >= 64 && b <= 127) ||
       (a === 169 && b === 254) ||
       (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && (b === 168 || b === 0)) ||
+      (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)))) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113) ||
       (a === 198 && (b === 18 || b === 19))
     );
   }
@@ -55,6 +58,7 @@ export async function validateTarget(
 }
 export function createAuditTransport(options: AuditOptions) {
   const usage = { requests: 0, inputTokensEstimated: 0 };
+  const tokens = createTokenUsageCounter();
   const maxRequests = options.limits?.maxRequests ?? 200;
   const maxInputTokens = options.limits?.maxInputTokens ?? 2_000_000;
   const maxResponseBytes = options.limits?.maxResponseBytes ?? 4_000_000;
@@ -76,9 +80,17 @@ export function createAuditTransport(options: AuditOptions) {
   const signal = options.signal
     ? AbortSignal.any([controller.signal, options.signal])
     : controller.signal;
+  const reserveRequest = () => {
+    signal.throwIfAborted();
+    if (usage.requests >= maxRequests)
+      throw new Error('Audit request budget exceeded');
+    usage.requests++;
+  };
   return {
     usage,
+    tokenUsage: () => tokens.snapshot(),
     signal,
+    reserveRequest,
     close: () => clearTimeout(deadline),
     fetch: async (
       input: string | URL,
@@ -104,6 +116,7 @@ export function createAuditTransport(options: AuditOptions) {
         throw new Error('Audit request or input token budget exceeded');
       usage.requests++;
       usage.inputTokensEstimated += estimated;
+      const recordTokens = tokens.begin(url, init.method ?? 'GET');
       return new Promise<Response>((resolve, reject) => {
         const request = (
           url.protocol === 'https:' ? httpsRequest : httpRequest
@@ -160,11 +173,17 @@ export function createAuditTransport(options: AuditOptions) {
                     Array.isArray(value) ? value.join(', ') : value
                   );
               const status = response.statusCode ?? 502;
+              const body = Buffer.concat(chunks);
+              recordTokens(
+                body.toString('utf8'),
+                headers.get('content-type') ?? '',
+                status
+              );
               resolve(
                 new Response(
                   [204, 205, 304].includes(status)
                     ? null
-                    : new Uint8Array(Buffer.concat(chunks)),
+                    : new Uint8Array(body),
                   { status, headers }
                 )
               );

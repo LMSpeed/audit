@@ -232,14 +232,7 @@ export async function probeModelFingerprint(
         : 'skipped',
       true
     );
-  if (!input.identity)
-    return result(
-      id,
-      started,
-      { decision: 'abstain', reason: 'baseline_required' },
-      [],
-      'unsupported'
-    );
+  if (!input.identity) return abstain('baseline_required');
   const { baseline, claimedModel } = input.identity;
   const error = baselineError(baseline);
   if (error) return abstain(error);

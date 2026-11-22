@@ -1,4 +1,9 @@
 import { getRelayAuditStepById } from '../catalog.js';
+import { getAuditAssessmentMessage } from '../probes/assessment.js';
+import {
+  createPromptReportColumns,
+  formatPromptReportTokens,
+} from '../probes/prompts.js';
 import type { ProbeResult } from '../schema/index.js';
 import type { RelayAuditEngineStep } from './types.js';
 
@@ -19,8 +24,12 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
         }
       : probe.verdict === 'inconclusive'
         ? {
-            zh: '没有足够证据完成此检测。',
-            en: 'Insufficient evidence to complete this check.',
+            zh:
+              getAuditAssessmentMessage(probe.observations, 'zh') ??
+              '没有足够证据完成此检测。',
+            en:
+              getAuditAssessmentMessage(probe.observations, 'en') ??
+              'Insufficient evidence to complete this check.',
           }
         : {
             zh: '本次请求满足所测契约。',
@@ -52,27 +61,103 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
     durationMs: probe.durationMs,
     summaryZh: explanation.zh,
     summaryEn: explanation.en,
-    tests: tests.map((test) => ({
-      id: test.code,
-      titleZh: definition.titleZh,
-      titleEn: definition.titleEn,
-      term: definition.titleEn,
-      status: ['blocked', 'error'].includes(probe.execution)
-        ? 'blocked'
-        : probe.verdict === 'finding'
-          ? 'failed'
-          : probe.verdict === 'inconclusive'
-            ? 'inconclusive'
-            : 'passed',
-      severity,
-      resultZh: explanation.zh,
-      resultEn: explanation.en,
-      plainLanguageZh: definition.descriptionZh,
-      plainLanguageEn: definition.descriptionEn,
-      evidenceZh: test.evidence,
-      evidenceEn: test.evidence,
-    })),
-    tables: [],
+    tests: probe.checks
+      ? probe.checks.map((check) => ({
+          id: check.id,
+          titleZh: check.titleZh,
+          titleEn: check.titleEn,
+          term: definition.titleEn,
+          status:
+            check.execution === 'blocked' || check.execution === 'error'
+              ? ('blocked' as const)
+              : check.verdict === 'finding'
+                ? ('failed' as const)
+                : check.verdict === 'pass'
+                  ? ('passed' as const)
+                  : ('inconclusive' as const),
+          severity:
+            check.verdict === 'finding'
+              ? ('warning' as const)
+              : check.verdict === 'inconclusive'
+                ? ('unknown' as const)
+                : check.informational
+                  ? ('info' as const)
+                  : ('safe' as const),
+          resultZh:
+            check.verdict === 'finding'
+              ? '发现泄漏线索，请复核证据。'
+              : check.verdict === 'inconclusive'
+                ? (getAuditAssessmentMessage(
+                    check.observations,
+                    'zh',
+                    check.verdict === 'inconclusive'
+                  ) ?? '未收集到足够证据。')
+                : (getAuditAssessmentMessage(check.observations, 'zh', false) ??
+                  (check.informational
+                    ? '已采集。'
+                    : '本次挑战未观察到泄漏。')),
+          resultEn:
+            check.verdict === 'finding'
+              ? 'Disclosure signal observed; review the evidence.'
+              : check.verdict === 'inconclusive'
+                ? (getAuditAssessmentMessage(
+                    check.observations,
+                    'en',
+                    check.verdict === 'inconclusive'
+                  ) ?? 'Insufficient evidence.')
+                : (getAuditAssessmentMessage(check.observations, 'en', false) ??
+                  (check.informational
+                    ? 'Collected.'
+                    : 'No disclosure observed in this challenge.')),
+          plainLanguageZh: definition.descriptionZh,
+          plainLanguageEn: definition.descriptionEn,
+          evidenceZh: JSON.stringify(check.observations),
+          evidenceEn: JSON.stringify(check.observations),
+        }))
+      : tests.map((test) => ({
+          id: test.code,
+          titleZh: definition.titleZh,
+          titleEn: definition.titleEn,
+          term: definition.titleEn,
+          status: ['blocked', 'error'].includes(probe.execution)
+            ? 'blocked'
+            : probe.verdict === 'finding'
+              ? 'failed'
+              : probe.verdict === 'inconclusive'
+                ? 'inconclusive'
+                : 'passed',
+          severity,
+          resultZh: explanation.zh,
+          resultEn: explanation.en,
+          plainLanguageZh: definition.descriptionZh,
+          plainLanguageEn: definition.descriptionEn,
+          evidenceZh: test.evidence,
+          evidenceEn: test.evidence,
+        })),
+    tables:
+      probe.checks &&
+      ['prompt_extraction', 'jailbreak_identity'].includes(probe.id)
+        ? [
+            {
+              id: probe.id,
+              titleZh: definition.titleZh,
+              titleEn: definition.titleEn,
+              columns: createPromptReportColumns(),
+              rows: probe.checks.map((check) => ({
+                probe: check.id,
+                systemPrompt: String(check.observations.systemPrompt ?? '-'),
+                userPrompt: String(check.observations.userPrompt ?? ''),
+                response: String(check.observations.response ?? ''),
+                tokens: formatPromptReportTokens(
+                  typeof check.observations.reportedInputTokens === 'number'
+                    ? check.observations.reportedInputTokens
+                    : null
+                ),
+                verdict: check.verdict,
+              })),
+            },
+          ]
+        : [],
     evidence: [
       {
         labelZh: '检测观测',

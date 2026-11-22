@@ -21,8 +21,10 @@ import {
 } from './probes/capabilities.js';
 import { CAPABILITY_IDS } from './probes/catalog.js';
 import { probeConditionalInjection } from './probes/conditional.js';
+import { probeInfrastructure } from './probes/infrastructure.js';
 import { probeQuality, probeQualityComparison } from './probes/quality.js';
 import { result as makeResult } from './probes/results.js';
+import { createProbeEvidence } from './protocols/evidence.js';
 import { createAuditTransport, validateTarget } from './protocols/transport.js';
 import { redactRelayAuditText } from './redaction.js';
 import type {
@@ -33,7 +35,7 @@ import type {
 } from './schema/index.js';
 import { validateDetectorConfiguration } from './schema/validate.js';
 export const ENGINE_VERSION = '0.3.3';
-export const RULESET_VERSION = 'independent-2026-11-22.1';
+export const RULESET_VERSION = 'independent-2026-11-23.1';
 export const AUDIT_PROBE_IDS = [
   ...RELAY_AUDIT_STEP_IDS,
   'channel_classifier',
@@ -77,8 +79,12 @@ export function createAuditPlan(input: AuditInput) {
             (id !== 'context_recall' || input.context) &&
             (id !== 'quality_comparison' || input.reference) &&
             (id !== 'model_fingerprint' || input.identity) &&
-            (id !== 'numeric_fingerprint' || input.numericFingerprint) &&
-            (id !== 'tokenizer_fingerprint' || input.tokenizer)
+            (id !== 'numeric_fingerprint' ||
+              input.numericFingerprint ||
+              input.referenceData !== 'disabled') &&
+            (id !== 'tokenizer_fingerprint' ||
+              input.tokenizer ||
+              input.referenceData !== 'disabled')
         );
   const requested = input.probes ? [...new Set(input.probes)] : defaults;
   if (
@@ -117,6 +123,7 @@ export async function executeAudit(
     );
   try {
     for (const id of requested) {
+      const evidence = createProbeEvidence(transport.fetch, scrub);
       transport.signal.throwIfAborted();
       await options.onEvent?.({ type: 'probe_started', probeId: id });
       if (id !== 'channel_classifier')
@@ -137,42 +144,49 @@ export async function executeAudit(
             reason: 'A calibrated model-specific token baseline is required',
           },
         };
+      } else if (id === 'infrastructure_recon') {
+        result = await probeInfrastructure(
+          input,
+          evidence.fetch,
+          { ...options, signal: transport.signal },
+          transport.reserveRequest
+        );
       } else if (
         CAPABILITY_IDS.includes(id as (typeof CAPABILITY_IDS)[number])
       ) {
         result =
           id === 'tool_calling'
-            ? await probeTools(input, transport.fetch)
+            ? await probeTools(input, evidence.fetch)
             : id === 'structured_output'
-              ? await probeStructuredOutput(input, transport.fetch)
+              ? await probeStructuredOutput(input, evidence.fetch)
               : id === 'image_understanding'
-                ? await probeMedia(input, transport.fetch, 'image')
+                ? await probeMedia(input, evidence.fetch, 'image')
                 : id === 'pdf_understanding'
-                  ? await probeMedia(input, transport.fetch, 'pdf')
+                  ? await probeMedia(input, evidence.fetch, 'pdf')
                   : id === 'context_recall'
-                    ? await probeContextRecall(input, transport.fetch)
+                    ? await probeContextRecall(input, evidence.fetch)
                     : id === 'stream_consistency'
-                      ? await probeStreamConsistency(input, transport.fetch)
+                      ? await probeStreamConsistency(input, evidence.fetch)
                       : id === 'quality_canary'
-                        ? await probeQuality(input, transport.fetch)
+                        ? await probeQuality(input, evidence.fetch)
                         : id === 'quality_comparison'
-                          ? await probeQualityComparison(input, transport.fetch)
+                          ? await probeQualityComparison(input, evidence.fetch)
                           : id === 'conditional_injection'
                             ? await probeConditionalInjection(
                                 input,
-                                transport.fetch
+                                evidence.fetch
                               )
                             : id === 'model_fingerprint'
                               ? await probeModelFingerprint(
                                   input,
-                                  transport.fetch
+                                  evidence.fetch
                                 )
                               : id === 'tokenizer_fingerprint'
-                                ? await probeTokenizer(input, transport.fetch)
+                                ? await probeTokenizer(input, evidence.fetch)
                                 : id === 'numeric_fingerprint'
                                   ? await probeNumericFingerprint(
                                       input,
-                                      transport.fetch
+                                      evidence.fetch
                                     )
                                   : makeResult(
                                       id,
@@ -185,10 +199,12 @@ export async function executeAudit(
                                       'unsupported'
                                     );
       } else {
-        result = await probeBoundary(id, input, transport.fetch, options);
+        result = await probeBoundary(id, input, evidence.fetch, options);
       }
       transport.signal.throwIfAborted();
-      result = JSON.parse(scrub(JSON.stringify(result))) as ProbeResult;
+      result = JSON.parse(
+        scrub(JSON.stringify(evidence.attach(result)))
+      ) as ProbeResult;
       results.push(result);
       if (id !== 'channel_classifier') {
         const step = capabilityStep(result);
@@ -210,6 +226,7 @@ export async function executeAudit(
         legacy.steps.push(step);
         legacy.requestedStepIds!.push(step.id);
         legacy.finishedAt = new Date().toISOString();
+        legacy.tokenUsage = transport.tokenUsage();
         legacy.provenance = {
           engineVersion: ENGINE_VERSION,
           rulesetVersion: RULESET_VERSION,
@@ -274,7 +291,7 @@ export async function executeAudit(
             ? 'inconclusive'
             : 'no_findings',
       },
-      usage: { ...transport.usage },
+      usage: { ...transport.usage, tokens: transport.tokenUsage() },
     };
     return { report, legacy };
   } finally {

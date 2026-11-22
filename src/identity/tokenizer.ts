@@ -4,8 +4,10 @@ import {
   requestCompletion,
 } from '../protocols/completion.js';
 import type { AuditInput } from '../schema/index.js';
+import { loadBundledTokenizerReference } from './bundled-references.js';
 import { assertTokenizerBank, wrapProbe } from './tokenizer-bank.js';
 import {
+  expectedClasses,
   nextProbes,
   probingDone,
   type TokenizerObservation,
@@ -19,7 +21,7 @@ export async function probeTokenizer(
 ) {
   const id = 'tokenizer_fingerprint';
   const started = performance.now();
-  const config = input.tokenizer;
+  let reference: Record<string, string> | undefined;
   const abstain = (
     reason: string,
     observations: Record<string, unknown> = {}
@@ -27,7 +29,12 @@ export async function probeTokenizer(
     result(
       id,
       started,
-      { decision: 'abstain', reason, ...observations },
+      {
+        decision: 'abstain',
+        reason,
+        ...(reference ? { reference } : {}),
+        ...observations,
+      },
       [],
       Array.isArray(observations.observations) &&
         observations.observations.length > 0
@@ -35,14 +42,21 @@ export async function probeTokenizer(
         : 'skipped',
       true
     );
-  if (!config)
-    return result(
-      id,
-      started,
-      { decision: 'abstain', reason: 'tokenizer_bank_required' },
-      [],
-      'unsupported'
-    );
+  let resolved = input.tokenizer;
+  if (!resolved && input.referenceData !== 'disabled') {
+    try {
+      const bundled = await loadBundledTokenizerReference();
+      resolved = bundled.configuration;
+      reference = bundled.provenance;
+    } catch (error) {
+      return abstain('bundled_tokenizer_reference_unavailable', {
+        error:
+          error instanceof Error ? error.message : 'Reference loading failed',
+      });
+    }
+  }
+  const config = resolved;
+  if (!config) return abstain('tokenizer_bank_required');
   try {
     assertTokenizerBank(config.bank);
   } catch {
@@ -54,7 +68,14 @@ export async function probeTokenizer(
     generated > Date.now() + 300000 ||
     Date.now() - generated > (config.maxAgeDays ?? 30) * 86400000
   )
-    return abstain('stale_tokenizer_bank');
+    return abstain('stale_tokenizer_bank', {
+      generatedAt: config.bank.generated_at,
+      maximumAgeDays: config.maxAgeDays ?? 30,
+    });
+  if (!expectedClasses(config.bank, input.target.modelId)?.expected.length)
+    return abstain('tokenizer_model_reference_missing', {
+      modelId: input.target.modelId,
+    });
   const observations: TokenizerObservation[] = [];
   const asked = new Set<string>();
   let failed = false;
@@ -102,6 +123,7 @@ export async function probeTokenizer(
   const evidence = {
     observations,
     baselineDrift,
+    ...(reference ? { reference } : {}),
     attribution:
       'Reported tokenizer-count compatibility only; usage may be estimated or modified, and tokenizers are shared across models.',
   };

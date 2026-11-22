@@ -35,9 +35,9 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     titleZh: '基础设施侦察',
     titleEn: 'Infrastructure recon',
     descriptionZh:
-      '检查 HTTP 入口可达性与响应类型；不执行 DNS、证书或域名所有权审计。',
+      '采集入口响应、DNS 地址/CNAME/NS、TLS 证书与 WHOIS 注册信息；采集失败单独记录，不据此证明域名归属。',
     descriptionEn:
-      'Checks HTTP reachability and content type; does not audit DNS, certificates or domain ownership.',
+      'Collects entry responses, DNS addresses/CNAME/NS, TLS certificates and WHOIS registration fields; records unavailable evidence separately without proving domain ownership.',
   },
   {
     id: 'model_list',
@@ -75,9 +75,10 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     target: 'model',
     titleZh: 'Prompt 提取',
     titleEn: 'Prompt extraction',
-    descriptionZh: '使用随机受保护值测量直接泄漏，不提取未知的中转提示词。',
+    descriptionZh:
+      '运行逐字复述、翻译与 JSON 续写提取，并用随机受保护值复核直接泄漏；启发式片段不等于真实系统原文。',
     descriptionEn:
-      'Measures direct disclosure of a random protected value; does not recover unknown relay instructions.',
+      'Runs verbatim, translation and JSON extraction plus a randomized disclosure control; heuristic fragments are not authenticated system prompts.',
   },
   {
     id: 'instruction_conflict',
@@ -99,11 +100,12 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     isolation: 'shared',
     scope: 'model',
     target: 'model',
-    titleZh: '编码泄漏挑战',
-    titleEn: 'Encoded disclosure challenge',
-    descriptionZh: '以 JSON 和 Base64 请求尝试泄漏随机受保护值。',
+    titleZh: '越狱与角色扮演',
+    titleEn: 'Jailbreak and role impersonation',
+    descriptionZh:
+      '运行系统诊断、Base64 与中间件角色扮演，并用 JSON/Base64 随机受保护值挑战补充验证。',
     descriptionEn:
-      'Tests JSON and base64 requests for disclosure of a generated protected value.',
+      'Runs system diagnostic, Base64 and middleware role-play probes plus randomized JSON/Base64 disclosure controls.',
   },
   {
     id: 'context_window',
@@ -114,9 +116,10 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     target: 'model',
     titleZh: '上下文窗口',
     titleEn: 'Context window',
-    descriptionZh: '在配置的长度与位置检查召回，不测量完整容量边界。',
+    descriptionZh:
+      '默认自动扩增输入并二分细化可用召回边界；达到资源上限时仅报告下界，显式长度配置仍支持定点抽测。',
     descriptionEn:
-      'Checks recall at configured sizes and positions; does not measure full capacity.',
+      'Automatically expands inputs and refines usable recall bounds; resource caps yield lower bounds, while explicit sizes retain fixed sampling.',
   },
   {
     id: 'tool_substitution',
@@ -178,11 +181,12 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     isolation: 'shared',
     scope: 'site',
     target: 'provider',
-    titleZh: '响应头线索',
-    titleEn: 'Response header hints',
-    descriptionZh: '展示有限的服务响应头线索，不推断真实上游或框架身份。',
+    titleZh: '框架指纹识别',
+    titleEn: 'Gateway framework fingerprint',
+    descriptionZh:
+      '比对入口页面、模型目录与错误路径中的 New API、One API、LiteLLM 和 One Hub 特征；仅为网关技术栈线索。',
     descriptionEn:
-      'Reports limited response header hints without inferring the upstream or framework identity.',
+      'Compares landing, model catalog and error-route signatures for New API, One API, LiteLLM and One Hub; gateway stack evidence only.',
   },
   {
     id: 'latency_variance',

@@ -12,6 +12,7 @@ export {
 export { collectFingerprintBaseline } from './identity/collect.js';
 export type { TokenizerBank } from './identity/tokenizer-bank.js';
 export type * from './schema/index.js';
+export { isAuditTokenUsage } from './schema/index.js';
 export async function runAudit(input: AuditInput, options: AuditOptions = {}) {
   return (await executeAudit(input, options)).report;
 }

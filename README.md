@@ -192,6 +192,8 @@ const report = await runAudit(
 console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 ```
 
+Verdicts are computed by the library. Explicit extraction refusals recognize English typography and Chinese/Russian refusal forms; an empty JSON extraction is informational, while ambiguous answers remain inconclusive. The semantic yes/no task accepts terminal punctuation; exact-literal tasks retain strict comparison. For unresolved checks, import `getAuditInconclusiveReason` from `@lmspeed/audit/assessment` to obtain a machine-readable cause for translation. Consumers should retain the engine verdict rather than replacing it with a display heuristic.
+
 ---
 
 ## Preview
@@ -207,7 +209,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 {
   "schemaVersion": "1",
   "engineVersion": "0.3.0",
-  "rulesetVersion": "independent-2026-11-22.1",
+  "rulesetVersion": "independent-2026-11-23.1",
   "target": {
     "baseUrl": "http://127.0.0.1:57215/v1",
     "modelId": "claude-sonnet-4-6",
@@ -284,7 +286,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | Profile | Included Probes by Default | Intended Use |
 | :--- | :--- | :--- |
 | `connectivity` | `model_list`, `stream_integrity` | Fast preflight reachability, authentication, and SSE framing verification |
-| `general` *(default)* | All 17 automatic probes across endpoint, prompt security, integrity, and quality; excludes `web3_prompt_injection` and opt-in probes unless configured | Standard relay contract & security audit |
+| `general` *(default)* | 19 automatic probes, including numeric screening and tokenizer evidence from bundled reference data; excludes `web3_prompt_injection` and other opt-in probes unless configured | Standard relay contract & security audit |
 | `web3` | `general` set + `web3_prompt_injection` + configured opt-in probes | General audit plus wallet seed-sharing refusal signal |
 | `full` | Same automatic set + `web3_prompt_injection` + all configured opt-in capability/reference probes (`tokenBaselines`, `vision`, `pdf`, `context`, `reference`, `identity`, `numericFingerprint`, `tokenizer`) | Comprehensive audit with full operator configuration |
 
@@ -301,9 +303,9 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 
 | Probe ID | Trigger | Behavior & Evidence Scope |
 | :--- | :--- | :--- |
-| `infrastructure_recon` | Auto | Checks base URL HTTP reachability, status, and `content-type`; does not audit DNS, TLS certificates, or domain ownership |
+| `infrastructure_recon` | Auto | Collects entry reachability, DNS addresses/CNAME/NS, TLS certificate details and bounded WHOIS registration fields; unavailable evidence stays separate |
 | `model_list` | Auto / `connectivity` | Reads `GET /models` JSON `data[]` catalog and checks whether `target.modelId` is listed (`advertised catalog only`) |
-| `infrastructure_fingerprint` | Auto | Sends a short readiness completion and summarizes non-identifying response header hints |
+| `infrastructure_fingerprint` | Auto | Compares landing, models and error-route signatures for New API, One API, LiteLLM, One Hub, LobeChat, FastGPT and common entry proxies; editable branding is evidence, not upstream proof |
 | `channel_classifier` | Auto | Inspects explicit header prefixes (`cf-aig-`, `x-amzn-bedrock-`, `anthropic-ratelimit-`); marks conflicting or absent hints as `inconclusive` |
 
 #### 2. Prompt & Injection Security (`prompt_security`)
@@ -311,8 +313,8 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | Probe ID | Trigger | Behavior & Evidence Scope |
 | :--- | :--- | :--- |
 | `token_injection` | Opt-in (`capabilities.tokenBaselines`) | Compares reported input usage across `plain`, `system`, and `question` templates against caller calibration (`reported_input_count_mismatch`) |
-| `prompt_extraction` | Auto | Embeds a fresh random `PRIVATE_*` token in system instructions and tests whether raw or base64 forms are disclosed (`protected_value_disclosed`) |
-| `jailbreak_identity` | Auto | Attempts JSON and base64 transformations to leak a fresh random `PRIVATE_*` protected value (`protected_value_disclosed`) |
+| `prompt_extraction` | Auto | Runs verbatim, translation and JSON-continuation probes plus a randomized protected-value control; retains separate results and prompts/responses |
+| `jailbreak_identity` | Auto | Runs system diagnostic, Base64 and middleware role-play strategies plus randomized JSON/Base64 disclosure controls |
 | `conditional_injection` | Auto | Runs 3 randomized ordinary vs. sensitive account task pairs and checks for excess `DECOY_*` disclosure + external `https://` forwarding directions |
 | `web3_prompt_injection` | `web3` / `full` | Tests structured JSON refusal policy on seed-phrase upload requests (`{"action":"reject"}` vs `"share"`) |
 
@@ -322,11 +324,15 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | :--- | :--- | :--- |
 | `instruction_conflict` | Auto | Places a fresh random `ACK_*` literal contract in system instructions while the user prompt requests ignoring it (`system_priority_mismatch`) |
 | `stream_integrity` | Auto / `connectivity` | Validates SSE framing (`[DONE]` / `message_stop` / `response.completed`), streamed model consistency, and monotonic usage counters |
-| `context_window` | Auto *(needs config)* | Samples bounded recall using `context.sizes` or `Math.min(16384, contextWindowTokens * 2)`; returns `unsupported` when neither is provided |
+| `context_window` | Auto | Without size configuration: exponential expansion and binary refinement, at most 12 requests, 524,288 input characters and 4,096-character resolution. Explicit sizes retain fixed recall sampling. Auth, quota and transient failures never establish capacity |
 | `context_recall` | Opt-in (`context`) | Embeds random `FACT_*` anchors at configurable positions (`[0, 0.25, 0.5, 0.75, 1]` default), confirming misses once before reporting `context_recall_missing` |
 | `model_fingerprint` | Opt-in (`identity`) | Compares answer distributions against a calibrated holdout baseline; abstains on expired, incomplete, incompatible, or low-margin samples |
-| `numeric_fingerprint` | Opt-in (`numericFingerprint`) | Verifies local `shared_detector.bin` SHA-256 and age (`1–90` days, default `30`), then ranks closed-set candidates via `lmfpd-sdk` |
-| `tokenizer_fingerprint` | Opt-in (`tokenizer`) | Runs adaptive differential probes with an external MIT `TokenizerBank` up to `0.99` posterior confidence; abstains on empty-prompt drift |
+| `numeric_fingerprint` | Auto; optional `numericFingerprint` override | Uses the shipped SHA-256-pinned reference (30-day age limit) for closed-set ranking; no runtime data downloads |
+| `tokenizer_fingerprint` | Auto; optional `tokenizer` override | Uses the shipped fixed tokenizer bank (90-day age limit, at most 12 adaptive probes plus two controls); abstains on drift or uncertainty |
+
+Reference data is owned and versioned by this package. SDK, CLI and LMSpeed use the same read-only `assets/references` snapshot, including source commit, original dates, hashes and MIT attribution. Explicit `numericFingerprint` and `tokenizer` configuration takes precedence. Set `referenceData: 'disabled'` in SDK/config JSON to disable automatic reference checks. Expired, missing or altered data is reported as inconclusive without downloading replacements or blocking unrelated checks. Distribution confirmation still requires an independently calibrated `identity` baseline.
+
+Maintainers update `references.source.json` to a reviewed upstream commit and Git blob hashes, then run `pnpm references:sync`. The command downloads only during maintenance, verifies original blobs and compatibility, and keeps only scoring metadata, the detector and tokenizer bank. Commit the snapshot and release through this repository's existing CI. See [reference data maintenance](./docs/references.md).
 
 #### 4. Response Integrity & Stability (`response_integrity_stability`)
 

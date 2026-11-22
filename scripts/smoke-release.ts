@@ -111,6 +111,44 @@ try {
       (result.stdout + result.stderr).includes('portable-smoke-key'),
       false
     );
+    // Given only a portable archive and a local target; When fingerprint checks run;
+    // Then their owned reference assets resolve without any package or website bootstrap.
+    relay.mode = 'numbers';
+    let fingerprintOutput: string;
+    try {
+      fingerprintOutput = (
+        await exec(
+          process.execPath,
+          [
+            cli,
+            'scan',
+            '--url',
+            baseUrl,
+            '--model',
+            'gpt-4o',
+            '--probes',
+            'numeric_fingerprint,tokenizer_fingerprint',
+            '--allow-private',
+          ],
+          {
+            cwd: directory,
+            env: { ...process.env, PROVIDER_API_KEY: 'portable-reference-key' },
+          }
+        )
+      ).stdout;
+    } catch (error) {
+      const failure = error as Error & { code?: number; stdout?: string };
+      if (failure.code !== 2 || !failure.stdout) throw error;
+      fingerprintOutput = failure.stdout;
+    }
+    const fingerprints = JSON.parse(fingerprintOutput) as {
+      probes: Array<{ observations: { reference: { owner: string } } }>;
+    };
+    assert.deepEqual(
+      fingerprints.probes.map((probe) => probe.observations.reference.owner),
+      ['LMSpeed/audit', 'LMSpeed/audit']
+    );
+    assert.equal(fingerprintOutput.includes('portable-reference-key'), false);
   } finally {
     await relay.close();
   }
