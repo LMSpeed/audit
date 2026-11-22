@@ -23,10 +23,10 @@
     "tool-calling",
     "structured-output",
     "json-schema",
-    "typescript",
-    "nodejs",
-    "cli",
-    "sdk"
+    "context-recall",
+    "prompt-security",
+    "streaming-integrity",
+    "model-evaluation"
   ],
   "type": "module",
   "license": "Apache-2.0",
