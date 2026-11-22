@@ -79,6 +79,7 @@ export async function runLmspeedAudit(
   output.summary = summarizeLegacyAudit(input, output.steps);
   output.startedAt = report.startedAt;
   output.finishedAt = report.finishedAt;
+  output.tokenUsage = report.usage.tokens;
   output.provenance = {
     engineVersion: report.engineVersion,
     rulesetVersion: report.rulesetVersion,

@@ -14,6 +14,7 @@ export type AuditInput = {
   apiKey: string;
   profile?: AuditProfile;
   probes?: readonly string[];
+  referenceData?: 'bundled' | 'disabled';
   capabilities?: {
     thinking?: boolean;
     contextWindowTokens?: number;
@@ -69,7 +70,40 @@ export type ProbeResult = {
   durationMs: number;
   findings: Finding[];
   observations: Record<string, unknown>;
+  checks?: Array<{
+    id: string;
+    titleZh: string;
+    titleEn: string;
+    execution: ProbeExecution;
+    verdict: ProbeVerdict;
+    observations: Record<string, unknown>;
+    informational?: boolean;
+  }>;
 };
+export type AuditTokenUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  modelRequests: number;
+  inputReportedRequests: number;
+  outputReportedRequests: number;
+};
+
+export function isAuditTokenUsage(value: unknown): value is AuditTokenUsage {
+  if (!value || typeof value !== 'object') return false;
+  const usage = value as Record<string, unknown>;
+  const count = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  return (
+    count(usage.modelRequests) &&
+    count(usage.inputReportedRequests) &&
+    count(usage.outputReportedRequests) &&
+    usage.inputReportedRequests <= usage.modelRequests &&
+    usage.outputReportedRequests <= usage.modelRequests &&
+    ['inputTokens', 'outputTokens'].every(
+      (key) => usage[key] === null || count(usage[key])
+    )
+  );
+}
 export type AuditReport = {
   schemaVersion: '1';
   engineVersion: string;
@@ -91,7 +125,11 @@ export type AuditReport = {
     policyId: string;
     verdict: 'findings' | 'no_findings' | 'inconclusive';
   };
-  usage: { requests: number; inputTokensEstimated: number };
+  usage: {
+    requests: number;
+    inputTokensEstimated: number;
+    tokens?: AuditTokenUsage;
+  };
 };
 export type AuditEvent = {
   type: 'probe_started' | 'probe_completed';
@@ -109,6 +147,9 @@ export type AuditOptions = {
     maxResponseBytes?: number;
   };
   pacingMs?: number;
+  infrastructure?: {
+    whoisServer?: { host: string; port: number };
+  };
 };
 const object = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -169,6 +210,7 @@ export function assertAuditReport(
       Number(usage![field]) < 0
     )
       fail();
+  if (usage!.tokens !== undefined && !isAuditTokenUsage(usage!.tokens)) fail();
   const findingValid = (value: unknown) => {
     const finding = object(value);
     return (

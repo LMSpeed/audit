@@ -42,6 +42,7 @@
     "CHANGELOG.zh-CN.md",
     "CHANGELOG.ru.md",
     "assets/readme-preview.png",
+    "assets/references",
     "LICENSE",
     "NOTICE",
     "THIRD_PARTY_NOTICES.md",
@@ -90,6 +91,10 @@
     "./legacy-types": {
       "types": "./dist/compat/types.d.ts",
       "import": "./dist/compat/types.js"
+    },
+    "./assessment": {
+      "types": "./dist/probes/assessment.d.ts",
+      "import": "./dist/probes/assessment.js"
     }
   },
   "scripts": {
@@ -102,7 +107,8 @@
     "test:governance": "tsx scripts/check-tests.ts",
     "verify:package": "pnpm build && tsx scripts/verify-package.ts",
     "release:prepare": "tsx scripts/prepare-release.ts",
-    "release:smoke": "tsx scripts/smoke-release.ts"
+    "release:smoke": "tsx scripts/smoke-release.ts",
+    "references:sync": "tsx scripts/sync-references.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",

@@ -1,0 +1,12 @@
+{
+  "version": "ikale-70159b7536a2",
+  "repository": "Ikaleio/lm-detector",
+  "commit": "70159b7536a2ceb55c478c8c9472da81d3627e59",
+  "license": "MIT",
+  "files": {
+    "shared_detector.bin": "174a57979ea8b89c91aa4f8f3ba356411fc9cd58",
+    "unified_bank.json": "bde970fc0b55c33c99d29b7867a2b87a1b29720f",
+    "tokenizer_bank.json": "a6d83247264eed64550ac3e2a5e76fa6f804c197"
+  },
+  "maximumAgeDays": { "numeric": 30, "tokenizer": 90 }
+}

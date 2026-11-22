@@ -4,6 +4,8 @@ The tokenizer bank contract and posterior/planner in src/identity/tokenizer-{ban
 
 The runtime dependency lmfpd-sdk 0.2.0 is also by xqy2006 and is distributed under the same MIT terms below.
 
+The bundled numeric detector, reduced numeric bank metadata and tokenizer bank in assets/references derive from the same MIT-licensed repository at the commit recorded in assets/references/manifest.json. Original source dates, model identities and per-file integrity hashes are retained. These data are redistributed with this notice, not claimed as independently acquired LMSpeed reference samples.
+
 MIT License
 
 Copyright (c) 2026 xqy2006

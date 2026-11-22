@@ -67,6 +67,13 @@ export const QUALITY_TASKS: readonly Task[] = [
   },
 ];
 function correct(task: Task, text: string) {
+  if (task.id === 'logic')
+    return (
+      text
+        .trim()
+        .replace(/[.!。！]$/u, '')
+        .toLowerCase() === task.expected
+    );
   if (task.id === 'json') {
     try {
       const value = object(JSON.parse(text));
@@ -92,6 +99,8 @@ export async function probeQuality(input: AuditInput, fetch: FetchCompletion) {
       return unavailable('quality_canary', started, response);
     trials.push({
       id: task.id,
+      prompt: task.prompt,
+      expected: task.expected,
       outcome: response.outcome,
       correct:
         response.outcome === 'answer' ? correct(task, response.text) : null,
@@ -173,6 +182,8 @@ export async function probeQualityComparison(
       values.referenceA!.correct === values.referenceB!.correct;
     trials.push({
       id: task.id,
+      prompt: task.prompt,
+      expected: task.expected,
       ...values,
       paired,
       regression:

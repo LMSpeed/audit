@@ -8,7 +8,7 @@ Capability checks exercise actual tool envelopes, negative tool controls, strict
 
 Quality checks measure a small workload. Paired comparisons distinguish acquisition failures from answers; optional judge opinions are auxiliary. Behavioral distributions require fresh compatible calibration, independently collected holdouts, external negative sources, absolute fit and separation. Inadequate evidence requires abstention.
 
-MIT tokenizer evidence is supporting evidence only. The separately configured offline numeric scorer ranks candidates within a closed set; it does not authenticate an unlisted model. No third-party model reference data is distributed here.
+MIT tokenizer evidence is supporting evidence only. The bundled offline numeric scorer ranks candidates within a closed set; it does not authenticate an unlisted model. Versioned MIT reference data ships with the package, retaining source dates and attribution; it is not independently acquired LMSpeed calibration data. See [reference maintenance](./references.md).
 
 Self-identification, response IDs, header hints and latency do not identify the actual upstream model. Error responses, malformed streams and random challenge failures report observed contracts, not the cause of a failure. A clean report covers only the selected workload and is not a safety certificate.
 

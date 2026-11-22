@@ -43,6 +43,7 @@ export async function loadAuditConfiguration(
     'identity',
     'tokenizer',
     'numericFingerprint',
+    'referenceData',
   ];
   if (Object.keys(config).some((key) => !allowed.includes(key)))
     throw new Error('Unknown audit configuration field');

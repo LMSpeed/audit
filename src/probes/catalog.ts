@@ -29,8 +29,6 @@ const entry = <T extends string>(
     'context_recall',
     'quality_comparison',
     'model_fingerprint',
-    'numeric_fingerprint',
-    'tokenizer_fingerprint',
   ].includes(id),
   titleZh,
   titleEn,

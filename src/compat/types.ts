@@ -1,3 +1,7 @@
+import type { AuditTokenUsage } from '../schema/index.js';
+
+export type { AuditTokenUsage } from '../schema/index.js';
+
 export const relayAuditVerdicts = [
   'trusted',
   'caution',
@@ -244,6 +248,7 @@ export type AuditProvenance = {
 };
 
 export type RelayAuditEngineOutput = {
+  tokenUsage?: AuditTokenUsage;
   provenance?: AuditProvenance;
   version: 'lmspeed-relay-audit-node-v1';
   targetUrl: string;
@@ -263,6 +268,7 @@ export type RelayAuditEngineOutput = {
 };
 
 export type RelayAuditStoredFactOutput = {
+  tokenUsage?: AuditTokenUsage;
   provenance?: AuditProvenance;
   version: 'lmspeed-relay-audit-facts-v1';
   engineVersion: RelayAuditEngineOutput['version'];

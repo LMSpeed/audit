@@ -49,6 +49,80 @@ afterAll(async () => {
 });
 
 describe('user installs the published CLI without the source repository', () => {
+  it('user runs shipped fingerprints from the installed SDK and CLI without a website bootstrap', async () => {
+    // Given a clean installation and a local model endpoint, with outbound proxies unavailable.
+    const relay = new FeatureRelay();
+    relay.mode = 'numbers';
+    const baseUrl = await relay.start();
+    const env = {
+      ...process.env,
+      PROVIDER_API_KEY: 'installed-reference-key',
+      NODE_USE_ENV_PROXY: '1',
+      HTTPS_PROXY: 'http://127.0.0.1:1',
+      HTTP_PROXY: 'http://127.0.0.1:1',
+      NO_PROXY: '127.0.0.1,localhost',
+    };
+    try {
+      // When the SDK runs using only target credentials and the CLI selects the same reference checks.
+      const sdk = await exec(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import {runAudit} from '@lmspeed/audit'; const report = await runAudit({target:{baseUrl:${JSON.stringify(baseUrl)},modelId:'gpt-4o'},apiKey:process.env.PROVIDER_API_KEY,probes:['numeric_fingerprint','tokenizer_fingerprint']},{networkPolicy:'local'}); process.stdout.write(JSON.stringify(report));`,
+        ],
+        { cwd: installation, env }
+      );
+      let cliOutput: string;
+      try {
+        cliOutput = (
+          await exec(
+            process.execPath,
+            [
+              join(
+                installation,
+                'node_modules/@lmspeed/audit/dist/cli/index.js'
+              ),
+              'scan',
+              '--url',
+              baseUrl,
+              '--model',
+              'gpt-4o',
+              '--probes',
+              'numeric_fingerprint,tokenizer_fingerprint',
+              '--allow-private',
+            ],
+            { cwd: installation, env }
+          )
+        ).stdout;
+      } catch (error) {
+        const failure = error as Error & { code?: number; stdout?: string };
+        if (failure.code !== 2 || !failure.stdout) throw error;
+        cliOutput = failure.stdout;
+      }
+      // Then both independent entrypoints report the same owned, versioned reference evidence.
+      for (const output of [sdk.stdout, cliOutput]) {
+        const report = JSON.parse(output) as {
+          probes: Array<{
+            observations: {
+              reference: { owner: string; version: string };
+              reason?: string;
+            };
+          }>;
+        };
+        expect(report.probes).toHaveLength(2);
+        expect(
+          report.probes.map((probe) => probe.observations.reference.owner)
+        ).toEqual(['LMSpeed/audit', 'LMSpeed/audit']);
+        expect(
+          report.probes.map((probe) => probe.observations.reference.version)
+        ).toEqual(['ikale-70159b7536a2', 'ikale-70159b7536a2']);
+        expect(output).not.toContain('installed-reference-key');
+      }
+    } finally {
+      await relay.close();
+    }
+  });
   it('user receives all three language guides with working local documentation links', async () => {
     // Given a clean installation from the actual publishable tarball.
     const root = join(installation, 'node_modules/@lmspeed/audit');

@@ -89,6 +89,15 @@ export async function probeTools(input: AuditInput, fetch: FetchCompletion) {
     id,
     started,
     {
+      expected: {
+        forced: {
+          name: 'audit_weather',
+          arguments: { city: 'Oslo', unit: 'celsius' },
+          count: 1,
+        },
+        disabledCalls: 0,
+        undeclaredCalls: 0,
+      },
       forcedValid,
       disabledHonored,
       undeclaredHonored,
@@ -144,6 +153,7 @@ export async function probeStructuredOutput(
     const value = object(parsed);
     trials.push({
       expectedOk,
+      expected: { ok: expectedOk, nonce },
       valid:
         value.ok === expectedOk &&
         value.nonce === nonce &&
@@ -386,6 +396,7 @@ export async function probeContextRecall(
         size,
         estimatedInputTokens: Math.ceil(context.length / 4),
         reportedInputTokens: response.usage.total,
+        expectedMarkers: facts,
         recalled,
         format: observed.format,
         response: response.text.slice(0, 4096),
@@ -400,6 +411,7 @@ export async function probeContextRecall(
       size,
       estimatedInputTokens: Math.ceil(context.length / 4),
       reportedInputTokens: response.usage.total,
+      expectedMarkers: facts,
       recalled,
       format: observed.format,
       response: response.text.slice(0, 4096),
