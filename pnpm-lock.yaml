@@ -21,6 +21,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 4.1.10
         version: 4.1.10(vitest@4.1.10)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       tsx:
         specifier: 4.23.12
         version: 4.23.12
@@ -599,6 +602,10 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
+  lmfpd-sdk@0.2.0:
+    resolution: {integrity: sha512-nW0lY2SJVtnvRibgaMIPfhMylO54/aHozUp/Yz5GHEWjNUZ8LAzyA6tYTI7Vbqm6qO2iI3+RcMbi27ibgzGmjQ==}
+    engines: {bun: '>=1.4.2', node: '>=22'}
+
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -778,11 +785,6 @@ packages:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
     hasBin: true
-
-  lmfpd-sdk@0.2.0:
-    resolution: {integrity: sha512-nW0lY2SJVtnvRibgaMIPfhMylO54/aHozUp/Yz5GHEWjNUZ8LAzyA6tYTI7Vbqm6qO2iI3+RcMbi27ibgzGmjQ==}
-    engines: {bun: '>=1.4.2', node: '>=22'}
-
 
 snapshots:
 
@@ -1203,6 +1205,8 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
 
+  lmfpd-sdk@0.2.0: {}
+
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
@@ -1338,5 +1342,3 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
-
-  lmfpd-sdk@0.2.0: {}

@@ -1,0 +1,188 @@
+name: Publish CLI and SDK
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag (for example v0.3.0)
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Prepare artifacts or reuse the immutable published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .cache/release
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir .cache/release
+          else
+            pnpm release:prepare
+          fi
+      - run: pnpm release:smoke
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release
+          path: .cache/release/*
+          if-no-files-found: error
+
+  portable:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release
+          path: .cache/release
+      - run: pnpm release:smoke
+
+  release:
+    needs: portable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release
+          path: .cache/release
+      - name: Publish verified downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            node --input-type=module -e "import { readFileSync, writeFileSync } from 'node:fs'; const notes = readFileSync('CHANGELOG.md', 'utf8').split(/^## /m)[1]; if (!notes?.startsWith(process.env.RELEASE_TAG.slice(1) + ' - ')) throw new Error('Missing release notes'); writeFileSync('.cache/notes.md', '## ' + notes);"
+            gh release create "$RELEASE_TAG" .cache/release/* --verify-tag --title "$RELEASE_TAG" --notes-file .cache/notes.md --repo "$GITHUB_REPOSITORY"
+          fi
+
+  npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release
+          path: .cache/release
+      - name: Publish public npm package with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          if ! pnpm view "@lmspeed/audit@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            pnpm publish ".cache/release/lmspeed-audit-$VERSION.tgz" --registry=https://registry.npmjs.org --access public --no-git-checks --ignore-scripts
+          fi
+
+  github-packages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          registry-url: https://npm.pkg.github.com
+          scope: '@nexmoe'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release
+          path: .cache/release
+      - name: Publish GitHub npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          if ! pnpm view "@nexmoe/lmspeed-audit@$VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            pnpm publish ".cache/release/nexmoe-lmspeed-audit-$VERSION.tgz" --registry=https://npm.pkg.github.com --access public --no-git-checks --ignore-scripts
+          fi
+
+  installers:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: main
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release
+          path: .cache/release
+      - name: Update the Homebrew tap and Scoop bucket
+        run: |
+          mkdir -p Formula bucket
+          cp .cache/release/lmspeed-audit.rb Formula/lmspeed-audit.rb
+          cp .cache/release/lmspeed-audit.json bucket/lmspeed-audit.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/lmspeed-audit.rb bucket/lmspeed-audit.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update installers for $RELEASE_TAG"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi

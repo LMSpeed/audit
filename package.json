@@ -2,6 +2,20 @@
   "name": "@lmspeed/audit",
   "version": "0.3.0",
   "description": "Evidence-based AI API relay auditing for Node.js, CLI and hosted engines",
+  "homepage": "https://lmspeed.net/audit",
+  "bugs": {
+    "url": "https://github.com/nexmoe/lmspeed-audit/issues"
+  },
+  "keywords": [
+    "lmspeed",
+    "cli",
+    "llm",
+    "api",
+    "relay",
+    "audit",
+    "security",
+    "model-fingerprint"
+  ],
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
@@ -10,6 +24,8 @@
   "files": [
     "dist",
     "README.md",
+    "README.zh-CN.md",
+    "assets/readme-preview.png",
     "LICENSE",
     "NOTICE",
     "THIRD_PARTY_NOTICES.md",
@@ -68,12 +84,15 @@
     "check": "pnpm build && biome check . && pnpm typecheck && pnpm test:governance && pnpm test:unit && pnpm verify:package",
     "prepack": "pnpm verify:package",
     "test:governance": "tsx scripts/check-tests.ts",
-    "verify:package": "pnpm build && tsx scripts/verify-package.ts"
+    "verify:package": "pnpm build && tsx scripts/verify-package.ts",
+    "release:prepare": "tsx scripts/prepare-release.ts",
+    "release:smoke": "tsx scripts/smoke-release.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "4.1.10",
+    "esbuild": "0.28.2",
     "tsx": "4.23.12",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
