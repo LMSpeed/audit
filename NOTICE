@@ -1,0 +1,6 @@
+lmspeed-audit
+Copyright 2026 LMSpeed contributors
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+Includes MIT-licensed tokenizer components and lmfpd-sdk by xqy2006;
+see THIRD_PARTY_NOTICES.md for their copyright and permission notice.

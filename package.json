@@ -1,0 +1,92 @@
+{
+  "name": "@lmspeed/audit",
+  "version": "0.3.0",
+  "description": "Evidence-based AI API relay auditing for Node.js, CLI and hosted engines",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "docs"
+  ],
+  "bin": {
+    "lmspeed-audit": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./compat": {
+      "types": "./dist/compat/index.d.ts",
+      "import": "./dist/compat/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "import": "./dist/catalog.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
+    "./classifiers": {
+      "types": "./dist/probes/classifiers.d.ts",
+      "import": "./dist/probes/classifiers.js"
+    },
+    "./sse": {
+      "types": "./dist/protocols/sse.d.ts",
+      "import": "./dist/protocols/sse.js"
+    },
+    "./model-family": {
+      "types": "./dist/protocols/model-family.d.ts",
+      "import": "./dist/protocols/model-family.js"
+    },
+    "./prompts": {
+      "types": "./dist/probes/prompts.d.ts",
+      "import": "./dist/probes/prompts.js"
+    },
+    "./redaction": {
+      "types": "./dist/redaction.d.ts",
+      "import": "./dist/redaction.js"
+    },
+    "./legacy-types": {
+      "types": "./dist/compat/types.d.ts",
+      "import": "./dist/compat/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test:unit": "pnpm build && vitest run --coverage",
+    "test": "pnpm build && vitest run",
+    "check": "pnpm build && biome check . && pnpm typecheck && pnpm test:governance && pnpm test:unit && pnpm verify:package",
+    "prepack": "pnpm verify:package",
+    "test:governance": "tsx scripts/check-tests.ts",
+    "verify:package": "pnpm build && tsx scripts/verify-package.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.8",
+    "@types/node": "25.6.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "tsx": "4.23.12",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nexmoe/lmspeed-audit.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.31.0",
+  "dependencies": {
+    "lmfpd-sdk": "0.2.0"
+  }
+}
