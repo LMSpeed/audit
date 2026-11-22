@@ -29,9 +29,9 @@ if (process.env.RELEASE_TAG && process.env.RELEASE_TAG !== tag)
 const output = resolve(process.argv[2] ?? '.cache/release');
 await mkdir(output, { recursive: true });
 const workspace = await mkdtemp(join(tmpdir(), 'audit-release-'));
-const base = `https://github.com/nexmoe/lmspeed-audit/releases/download/${tag}`;
+const base = `https://github.com/lmspeed/audit/releases/download/${tag}`;
 const npmArchive = `lmspeed-audit-${version}.tgz`;
-const githubArchive = `nexmoe-lmspeed-audit-${version}.tgz`;
+const githubArchive = `lmspeed-audit-github-${version}.tgz`;
 const portableName = `lmspeed-audit-${version}`;
 const assets = [
   npmArchive,
@@ -46,7 +46,7 @@ try {
   const githubManifest = JSON.parse(
     await readFile(packagePath, 'utf8')
   ) as typeof manifest;
-  githubManifest.name = '@nexmoe/lmspeed-audit';
+  githubManifest.name = '@lmspeed/audit';
   githubManifest.publishConfig = {
     access: 'public',
     registry: 'https://npm.pkg.github.com',
@@ -144,10 +144,10 @@ end
   "extract_dir": "lmspeed-audit",
   "bin": [["lmspeed-audit.cmd", "lmspeed-audit"]],
   "checkver": {
-    "github": "https://github.com/nexmoe/lmspeed-audit"
+    "github": "https://github.com/lmspeed/audit"
   },
   "autoupdate": {
-    "url": "https://github.com/nexmoe/lmspeed-audit/releases/download/v$version/lmspeed-audit-$version.zip"
+    "url": "https://github.com/lmspeed/audit/releases/download/v$version/lmspeed-audit-$version.zip"
   }
 }
 `

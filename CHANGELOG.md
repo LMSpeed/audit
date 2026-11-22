@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 - 2026-11-22
+
+### Improvements
+
+- The project now lives at [lmspeed/audit](https://github.com/lmspeed/audit), with updated installation instructions and issue links.
+- Both npm and GitHub Packages now offer the command and SDK as `@lmspeed/audit`.
+
 ## 0.3.2 - 2026-11-22
 
 ### Improvements

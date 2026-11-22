@@ -1,5 +1,12 @@
 # 更新日志
 
+## 0.3.3 - 2026-11-22
+
+### 改进与修复
+
+- 项目迁移至 [lmspeed/audit](https://github.com/lmspeed/audit)，安装说明与问题反馈链接同步更新。
+- npm 和 GitHub Packages 统一使用 `@lmspeed/audit` 提供命令行工具和 SDK。
+
 ## 0.3.2 - 2026-11-22
 
 ### 改进与修复

@@ -6,8 +6,8 @@ When no bootstrap token is configured, the npm job verifies the GitHub-to-npm OI
 
 ## Registries
 
-- npm: [`@lmspeed/audit`](https://www.npmjs.com/package/@lmspeed/audit), public, with provenance. For the first publication, configure repository secret `NPM_TOKEN` with permission to publish this package under the `@lmspeed` scope. After the package exists, configure an [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/): user `nexmoe`, repository `lmspeed-audit`, workflow `release.yml`, no environment. Once verified, remove the token secret; the workflow has `id-token: write` for OIDC. Publishing uses the npm CLI provided by Node.js 24 through `pnpm publish` (npm >=11.5.1 is required).
-- GitHub Packages: [`@nexmoe/lmspeed-audit`](https://github.com/nexmoe/lmspeed-audit/packages), using this repository's `GITHUB_TOKEN`. GitHub requires the package scope to match the repository owner. The SDK can be installed under its usual name with a package alias. GitHub initially creates packages as private: after the first publication, change package settings to **Public**. Even public npm packages on GitHub require a `read:packages` token for installation. See [GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry).
+- npm: [`@lmspeed/audit`](https://www.npmjs.com/package/@lmspeed/audit), public, with provenance. For the first publication, configure repository secret `NPM_TOKEN` with permission to publish this package under the `@lmspeed` scope. After the package exists, configure an [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/): organization `LMSpeed`, repository `audit`, workflow `release.yml`, no environment. Once verified, remove the token secret; the workflow has `id-token: write` for OIDC. Publishing uses the npm CLI provided by Node.js 24 through `pnpm publish` (npm >=11.5.1 is required).
+- GitHub Packages: [`@lmspeed/audit`](https://github.com/lmspeed/audit/pkgs/npm/audit), using this repository's `GITHUB_TOKEN`. GitHub requires the package scope to match the repository owner. Both registries use the same package name; map the `@lmspeed` scope to GitHub Packages only when using that registry. GitHub initially creates packages as private: after the first publication, change package settings to **Public**. Even public npm packages on GitHub require a `read:packages` token for installation. See [GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry).
 
 ## Homebrew, Scoop and downloads
 
@@ -24,3 +24,9 @@ git push origin main vX.Y.Z
 Update both changelogs before tagging. To retry registry publication or installer updates, dispatch `release.yml` with the existing tag; successful registry versions are skipped. Do not replace an existing release asset or tag. For packaging fixes after publication, increment both the package and engine versions and publish a new tag.
 
 The package homepage, registry metadata, installer homepages and READMEs lead back to [LMSpeed's online audit](https://lmspeed.net/audit). LMSpeed links to the repository and installation channels from its audit methodology section.
+
+## Repository migration
+
+Since 0.3.3 the canonical repository is [lmspeed/audit](https://github.com/lmspeed/audit). Existing releases and their assets remain immutable; GitHub redirects their previous repository URLs. GitHub Packages versions before 0.3.3 remain under the legacy `@nexmoe/lmspeed-audit` name. New versions use `@lmspeed/audit` on both registries.
+
+Existing Homebrew users can switch taps with `brew uninstall lmspeed-audit`, `brew untap nexmoe/lmspeed-audit`, then the new tap/install commands in the README. Existing Scoop users can remove and re-add the `lmspeed` bucket using the new repository URL; installed applications remain available.

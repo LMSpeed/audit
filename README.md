@@ -4,10 +4,10 @@
 
 **Evidence-based LLM API and relay auditing for Node.js, TypeScript, and the CLI — testing protocol fidelity, tool and schema contracts, prompt isolation, context recall, and behavioral consistency.**
 
-[![CI](https://github.com/nexmoe/lmspeed-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/nexmoe/lmspeed-audit/actions/workflows/ci.yml)
+[![CI](https://github.com/lmspeed/audit/actions/workflows/ci.yml/badge.svg)](https://github.com/lmspeed/audit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](./package.json)
-[![Engine](https://img.shields.io/badge/Engine-0.3.2-0969da.svg)](./package.json)
+[![Engine](https://img.shields.io/badge/Engine-0.3.3-0969da.svg)](./package.json)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
@@ -46,7 +46,7 @@ Want to test an endpoint right away without installing anything locally? LMSpeed
 Paste this prompt into Claude Code, Codex, Cursor, or any terminal-capable coding agent to set up and run an audit interactively without editing placeholders:
 
 ```text
-Set up and run an API endpoint audit using lmspeed-audit (`https://github.com/nexmoe/lmspeed-audit`).
+Set up and run an API endpoint audit using lmspeed-audit (`https://github.com/lmspeed/audit`).
 
 1. Install the published CLI with `pnpm add --global @lmspeed/audit` (Node.js >=22.12), then inspect `lmspeed-audit --help` and `lmspeed-audit list --format json` so you know the exact flags and probe IDs. For a one-off run, use `pnpm dlx @lmspeed/audit --help`. See the Installation section for Homebrew, Scoop and portable downloads.
 2. Before making any network calls to the target endpoint, ask me for any details not already provided in this conversation:
@@ -83,8 +83,8 @@ Package: [`@lmspeed/audit`](https://www.npmjs.com/package/@lmspeed/audit).
 ### Homebrew (macOS and Linux)
 
 ```sh
-brew tap nexmoe/lmspeed-audit https://github.com/nexmoe/lmspeed-audit
-brew install nexmoe/lmspeed-audit/lmspeed-audit
+brew tap lmspeed/audit https://github.com/lmspeed/audit
+brew install lmspeed/audit/lmspeed-audit
 lmspeed-audit --version
 ```
 
@@ -93,7 +93,7 @@ This repository is the upstream Homebrew tap. Upgrade with `brew update && brew 
 ### Scoop (Windows)
 
 ```powershell
-scoop bucket add lmspeed https://github.com/nexmoe/lmspeed-audit
+scoop bucket add lmspeed https://github.com/lmspeed/audit
 scoop install lmspeed/lmspeed-audit
 lmspeed-audit --version
 ```
@@ -102,24 +102,24 @@ The upstream bucket installs the portable command and `nodejs-lts`. Upgrade with
 
 ### GitHub Packages
 
-GitHub's npm registry requires authentication even for public packages. First authenticate with a classic personal access token with `read:packages`, following the [GitHub registry instructions](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry), and map only the `@nexmoe` scope:
+GitHub's npm registry requires authentication even for public packages. First authenticate with a classic personal access token with `read:packages`, following the [GitHub registry instructions](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry), and map only the `@lmspeed` scope:
 
 ```ini
-@nexmoe:registry=https://npm.pkg.github.com
+@lmspeed:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
 ```sh
-pnpm add --global @nexmoe/lmspeed-audit
-# SDK alias preserves existing imports from @lmspeed/audit
-pnpm add @lmspeed/audit@npm:@nexmoe/lmspeed-audit
+pnpm add --global @lmspeed/audit
+# The SDK uses the same package name on both registries
+pnpm add @lmspeed/audit
 ```
 
-Do not commit tokens. The primary npm package needs no GitHub login.
+Use this mapping only when installing from GitHub Packages; omit it for npmjs.org. Do not commit tokens. The primary npm package needs no GitHub login.
 
 ### Portable downloads
 
-[GitHub Releases](https://github.com/nexmoe/lmspeed-audit/releases/latest) provide `.tar.gz` and `.zip` archives containing the bundled command, runtime dependencies, documentation and license notices. Verify the download against `SHA256SUMS`, extract it, and run `node lmspeed-audit/lmspeed-audit.mjs --help` (or `lmspeed-audit.cmd` on Windows). No dependency installation is required; Node.js is still required.
+[GitHub Releases](https://github.com/lmspeed/audit/releases/latest) provide `.tar.gz` and `.zip` archives containing the bundled command, runtime dependencies, documentation and license notices. Verify the download against `SHA256SUMS`, extract it, and run `node lmspeed-audit/lmspeed-audit.mjs --help` (or `lmspeed-audit.cmd` on Windows). No dependency installation is required; Node.js is still required.
 
 For an immediate browser-based check, use [LMSpeed Audit](https://lmspeed.net/audit), [LLM speed tests](https://lmspeed.net/speed) or the [provider directory](https://lmspeed.net/provider). See [publishing and channel maintenance](./docs/releasing.md) for release automation.
 
@@ -128,8 +128,8 @@ For an immediate browser-based check, use [LMSpeed Audit](https://lmspeed.net/au
 Requires **Node.js `>= 22.12`** and **pnpm**:
 
 ```sh
-git clone https://github.com/nexmoe/lmspeed-audit.git
-cd lmspeed-audit
+git clone https://github.com/lmspeed/audit.git
+cd audit
 pnpm install --frozen-lockfile
 pnpm build
 node dist/cli/index.js --help

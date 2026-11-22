@@ -4,14 +4,14 @@
   "homepage": "https://lmspeed.net/audit",
   "license": "Apache-2.0",
   "depends": "nodejs-lts",
-  "url": "https://github.com/nexmoe/lmspeed-audit/releases/download/v0.3.2/lmspeed-audit-0.3.2.zip",
+  "url": "https://github.com/lmspeed/audit/releases/download/v0.3.2/lmspeed-audit-0.3.2.zip",
   "hash": "ad56d14b68a01b874b44cf6fe96c1d56bc344b0cb92faed213893ba0d944c535",
   "extract_dir": "lmspeed-audit",
   "bin": [["lmspeed-audit.cmd", "lmspeed-audit"]],
   "checkver": {
-    "github": "https://github.com/nexmoe/lmspeed-audit"
+    "github": "https://github.com/lmspeed/audit"
   },
   "autoupdate": {
-    "url": "https://github.com/nexmoe/lmspeed-audit/releases/download/v$version/lmspeed-audit-$version.zip"
+    "url": "https://github.com/lmspeed/audit/releases/download/v$version/lmspeed-audit-$version.zip"
   }
 }

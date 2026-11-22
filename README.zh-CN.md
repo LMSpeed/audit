@@ -4,10 +4,10 @@
 
 **面向 LLM API 与中转接口的循证式审计 SDK 与 CLI — 校验协议规范、工具与结构化输出契约、提示词隔离、上下文召回及行为一致性。**
 
-[![CI](https://github.com/nexmoe/lmspeed-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/nexmoe/lmspeed-audit/actions/workflows/ci.yml)
+[![CI](https://github.com/lmspeed/audit/actions/workflows/ci.yml/badge.svg)](https://github.com/lmspeed/audit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](./package.json)
-[![Engine](https://img.shields.io/badge/Engine-0.3.2-0969da.svg)](./package.json)
+[![Engine](https://img.shields.io/badge/Engine-0.3.3-0969da.svg)](./package.json)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
@@ -46,7 +46,7 @@
 将下方提示词直接复制给 Claude Code、Codex、Cursor 或任意具备终端执行能力的 Agent，即可引导其向你确认必要信息并完成全流程审计：
 
 ```text
-请帮我安装并使用 lmspeed-audit（https://github.com/nexmoe/lmspeed-audit）审计一个 LLM API 端点。
+请帮我安装并使用 lmspeed-audit（https://github.com/lmspeed/audit）审计一个 LLM API 端点。
 
 1. 使用 Node.js >=22.12，通过 `pnpm add --global @lmspeed/audit` 安装已发布的 CLI，并先运行 `lmspeed-audit --help` 与 `lmspeed-audit list --format json` 确认可用参数和全部探针 ID。单次运行可用 `pnpm dlx @lmspeed/audit --help`；Homebrew、Scoop 和便携下载见安装章节。
 2. 在向目标端点发送任何网络请求之前，先向我询问并确认对话中尚未提供的必要信息：
@@ -83,8 +83,8 @@ pnpm add @lmspeed/audit
 ### Homebrew（macOS 与 Linux）
 
 ```sh
-brew tap nexmoe/lmspeed-audit https://github.com/nexmoe/lmspeed-audit
-brew install nexmoe/lmspeed-audit/lmspeed-audit
+brew tap lmspeed/audit https://github.com/lmspeed/audit
+brew install lmspeed/audit/lmspeed-audit
 lmspeed-audit --version
 ```
 
@@ -93,7 +93,7 @@ lmspeed-audit --version
 ### Scoop（Windows）
 
 ```powershell
-scoop bucket add lmspeed https://github.com/nexmoe/lmspeed-audit
+scoop bucket add lmspeed https://github.com/lmspeed/audit
 scoop install lmspeed/lmspeed-audit
 lmspeed-audit --version
 ```
@@ -102,24 +102,24 @@ lmspeed-audit --version
 
 ### GitHub Packages
 
-GitHub 的 npm 注册表即使安装公开包也要求鉴权。按 [GitHub 官方文档](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry) 使用具有 `read:packages` 权限的 classic personal access token 登录，并仅映射 `@nexmoe` scope：
+GitHub 的 npm 注册表即使安装公开包也要求鉴权。按 [GitHub 官方文档](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry) 使用具有 `read:packages` 权限的 classic personal access token 登录，并仅映射 `@lmspeed` scope：
 
 ```ini
-@nexmoe:registry=https://npm.pkg.github.com
+@lmspeed:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
 ```sh
-pnpm add --global @nexmoe/lmspeed-audit
-# 使用别名保留 @lmspeed/audit 的 SDK 导入方式
-pnpm add @lmspeed/audit@npm:@nexmoe/lmspeed-audit
+pnpm add --global @lmspeed/audit
+# 两个注册表均使用相同 SDK 包名
+pnpm add @lmspeed/audit
 ```
 
-不要提交令牌。主 npm 包不需要 GitHub 登录。
+仅在使用 GitHub Packages 时配置该映射，使用 npmjs.org 时无需配置。不要提交令牌。主 npm 包不需要 GitHub 登录。
 
 ### 便携下载
 
-[GitHub Releases](https://github.com/nexmoe/lmspeed-audit/releases/latest) 提供 `.tar.gz`、`.zip` 和 `SHA256SUMS`。便携包包含已构建的命令、运行依赖、文档与许可声明。核对校验和后解压，运行 `node lmspeed-audit/lmspeed-audit.mjs --help`，Windows 也可运行 `lmspeed-audit.cmd`。无需安装依赖，但仍需 Node.js。
+[GitHub Releases](https://github.com/lmspeed/audit/releases/latest) 提供 `.tar.gz`、`.zip` 和 `SHA256SUMS`。便携包包含已构建的命令、运行依赖、文档与许可声明。核对校验和后解压，运行 `node lmspeed-audit/lmspeed-audit.mjs --help`，Windows 也可运行 `lmspeed-audit.cmd`。无需安装依赖，但仍需 Node.js。
 
 免安装可直接使用 [LMSpeed 在线审计](https://lmspeed.net/zh/audit)、[LLM 测速](https://lmspeed.net/zh/speed) 与[服务商目录](https://lmspeed.net/zh/provider)。维护者可查看[发布与安装渠道维护文档](./docs/releasing.md)。
 
@@ -128,8 +128,8 @@ pnpm add @lmspeed/audit@npm:@nexmoe/lmspeed-audit
 环境要求：**Node.js `>= 22.12`** 与 **pnpm**：
 
 ```sh
-git clone https://github.com/nexmoe/lmspeed-audit.git
-cd lmspeed-audit
+git clone https://github.com/lmspeed/audit.git
+cd audit
 pnpm install --frozen-lockfile
 pnpm build
 node dist/cli/index.js --help

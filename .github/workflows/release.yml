@@ -171,7 +171,7 @@ jobs:
         with:
           node-version: '24'
           registry-url: https://npm.pkg.github.com
-          scope: '@nexmoe'
+          scope: '@lmspeed'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: release
@@ -183,13 +183,13 @@ jobs:
         run: |
           VERSION="${RELEASE_TAG#v}"
           export VERSION
-          if gh api --paginate --slurp /users/nexmoe/packages/npm/lmspeed-audit/versions > .cache/github-package-versions.json; then
+          if gh api --paginate --slurp /orgs/lmspeed/packages/npm/audit/versions > .cache/github-package-versions.json; then
             if node --input-type=module -e "import { readFileSync } from 'node:fs'; const pages = JSON.parse(readFileSync('.cache/github-package-versions.json', 'utf8')); process.exit(pages.flat().some(version => version.name === process.env.VERSION) ? 0 : 1);"; then
               echo "GitHub Packages $VERSION is already published"
               exit 0
             fi
           fi
-          pnpm publish ".cache/release/nexmoe-lmspeed-audit-$VERSION.tgz" --registry=https://npm.pkg.github.com --access public --no-git-checks --ignore-scripts
+          pnpm publish ".cache/release/lmspeed-audit-github-$VERSION.tgz" --registry=https://npm.pkg.github.com --access public --no-git-checks --ignore-scripts
 
   installers:
     needs: release

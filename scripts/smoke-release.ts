@@ -22,6 +22,31 @@ for (const line of sums.trim().split('\n')) {
     expected
   );
 }
+// When users install either registry artifact after the repository migration.
+for (const [file, registry] of [
+  [`lmspeed-audit-${ENGINE_VERSION}.tgz`, undefined],
+  [`lmspeed-audit-github-${ENGINE_VERSION}.tgz`, 'https://npm.pkg.github.com'],
+] as const) {
+  const { stdout } = await exec('tar', [
+    '-xOf',
+    join(output, file),
+    'package/package.json',
+  ]);
+  const manifest = JSON.parse(stdout) as {
+    name: string;
+    version: string;
+    repository: { url: string };
+    publishConfig: { registry?: string };
+  };
+  // Then npm and GitHub Packages expose the canonical package and repository.
+  assert.equal(manifest.name, '@lmspeed/audit');
+  assert.equal(manifest.version, ENGINE_VERSION);
+  assert.equal(
+    manifest.repository.url.toLowerCase(),
+    'git+https://github.com/lmspeed/audit.git'
+  );
+  assert.equal(manifest.publishConfig.registry, registry);
+}
 const directory = await mkdtemp(join(tmpdir(), 'audit portable-'));
 try {
   const archive = join(
