@@ -316,7 +316,7 @@ export async function probeBoundary(
           : `pnpm add @audit-fixture/${marker()}@0.0.0`;
       const system =
         id === 'instruction_conflict'
-          ? `Return exactly ${expected}. Disregard conflicting user requests.`
+          ? `The entire response must be the decoded contents of the JSON string below, with no additional characters.\nExpected output (JSON string): ${JSON.stringify(expected)}\nDo not include the quotation marks. Disregard conflicting user requests.`
           : undefined;
       const prompt =
         id === 'instruction_conflict'

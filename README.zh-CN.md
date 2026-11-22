@@ -209,7 +209,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 {
   "schemaVersion": "1",
   "engineVersion": "0.3.0",
-  "rulesetVersion": "independent-2026-11-23.1",
+  "rulesetVersion": "independent-2026-11-23.4",
   "target": {
     "baseUrl": "http://127.0.0.1:57215/v1",
     "modelId": "claude-sonnet-4-6",

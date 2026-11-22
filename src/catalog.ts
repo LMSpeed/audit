@@ -4,6 +4,8 @@ import type {
 } from './compat/types.js';
 import { CAPABILITY_DEFINITIONS } from './probes/catalog.js';
 
+export { ENGINE_VERSION, RULESET_VERSION } from './version.js';
+
 export type RelayAuditStepIsolation = 'shared' | 'heavy' | 'exclusive';
 
 export type RelayAuditStepScope = 'site' | 'model';

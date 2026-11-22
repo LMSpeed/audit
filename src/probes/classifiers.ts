@@ -21,6 +21,9 @@ export function looksLikePromptExtractionRefusal(text: string) {
     /\b(?:cannot|can\s+not|can't|will\s+not|won't|refuse\s+to|unable\s+to)\s+(?:(?:directly|verbatim|fully)\s+)?(?:disclose|reveal|provide|share|show|translate)\b/i.test(
       normalized
     ) ||
+    /\b(?:access|request)\s+(?:is\s+)?denied[.!:;—]\s+(?:internal|hidden|system|developer|model[- ]routing)[^.!?\n]{0,80}\b(?:instructions?|prompts?|configuration)\s+(?:are|is|remain)\s+(?:private|confidential|protected)\b/i.test(
+      normalized
+    ) ||
     /(?:不能|无法|無法|不会|不會|不可|拒绝|拒絕|恕不)(?:(?:直接|逐字|完整|为你|為你|予以|进行|進行)){0,2}(?:透露|披露|提供|公开|公開|泄露|洩露|展示|复述|複述|翻译|翻譯|译|譯)/u.test(
       normalized
     ) ||

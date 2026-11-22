@@ -10,6 +10,7 @@ import {
   expectedClasses,
   nextProbes,
   probingDone,
+  TOKENIZER_MODEL,
   type TokenizerObservation,
   tokenizerPosterior,
   tokenizerVerdict,
@@ -123,6 +124,7 @@ export async function probeTokenizer(
   const evidence = {
     observations,
     baselineDrift,
+    requiredConfidence: TOKENIZER_MODEL.stopAt,
     ...(reference ? { reference } : {}),
     attribution:
       'Reported tokenizer-count compatibility only; usage may be estimated or modified, and tokenizers are shared across models.',
@@ -147,7 +149,7 @@ export async function probeTokenizer(
   );
   if (
     verdict.kind !== 'exact' ||
-    verdict.confidence < 0.99 ||
+    verdict.confidence < TOKENIZER_MODEL.stopAt ||
     verdict.claim?.status === 'uncertain'
   )
     return abstain('unknown_or_uncertain_tokenizer', {

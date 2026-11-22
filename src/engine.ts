@@ -34,8 +34,9 @@ import type {
   ProbeResult,
 } from './schema/index.js';
 import { validateDetectorConfiguration } from './schema/validate.js';
-export const ENGINE_VERSION = '0.3.3';
-export const RULESET_VERSION = 'independent-2026-11-23.1';
+import { ENGINE_VERSION, RULESET_VERSION } from './version.js';
+
+export { ENGINE_VERSION, RULESET_VERSION } from './version.js';
 export const AUDIT_PROBE_IDS = [
   ...RELAY_AUDIT_STEP_IDS,
   'channel_classifier',

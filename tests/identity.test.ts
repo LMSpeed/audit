@@ -172,5 +172,6 @@ describe('user keeps tokenizer evidence separate from model identity', () => {
     // Then the unknown or uncertain result stays distinct from model identity.
     expect(report.probes[0]?.verdict).toBe('inconclusive');
     expect(report.probes[0]?.observations.decision).not.toBe('exact');
+    expect(report.probes[0]?.observations.requiredConfidence).toBe(0.99);
   });
 });

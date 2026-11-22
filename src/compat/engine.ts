@@ -44,7 +44,16 @@ export function summarizeLegacyAudit(
     )
   );
   const acquired = steps.some((step) => step.status === 'completed');
-  const blocked = !evidence && modelSteps.length > 0;
+  const measured = modelSteps.some((step) =>
+    step.tests.some((test) => test.status === 'inconclusive')
+  );
+  const preflightOnly =
+    modelSteps.length > 0 &&
+    modelSteps.every(
+      (step) => step.status === 'inconclusive' && step.tests.length === 0
+    );
+  const blocked =
+    !evidence && !measured && !preflightOnly && modelSteps.length > 0;
   const failure = modelSteps.find(
     (step) => step.status === 'blocked' || step.status === 'failed'
   );
@@ -70,7 +79,7 @@ export function summarizeLegacyAudit(
   return {
     verdict: finding
       ? 'caution'
-      : evidence || (acquired && !blocked)
+      : evidence || (acquired && modelSteps.length === 0)
         ? 'trusted'
         : 'unknown',
     headlineZh: blocked
@@ -85,6 +94,8 @@ export function summarizeLegacyAudit(
         : 'Selected checks finished; results describe this run only',
     ...(blocked
       ? { completionStatus: 'blocked', completionReason: reason }
-      : {}),
+      : !evidence && modelSteps.length > 0
+        ? { completionStatus: 'complete' }
+        : {}),
   };
 }

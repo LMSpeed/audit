@@ -42,8 +42,23 @@ export class IndependentRelay {
     );
     const user = String(messages.find((m) => m.role === 'user')?.content ?? '');
     let text = 'ready';
-    const required = system.match(/Return exactly ([A-Z0-9_]+)\./)?.[1];
-    if (required) text = this.mode === 'ignore-system' ? '42' : required;
+    const literal = system.match(
+      /^Expected output \(JSON string\): (".*")$/m
+    )?.[1];
+    const required = literal
+      ? String(JSON.parse(literal))
+      : system.match(
+          this.mode === 'literal-boundary'
+            ? /Return exactly (\S+)/
+            : /Return exactly ([A-Z0-9_]+)\./
+        )?.[1];
+    if (required)
+      text =
+        this.mode === 'ignore-system'
+          ? '42'
+          : this.mode === 'append-punctuation'
+            ? `${required}.`
+            : required;
     if (user.startsWith('Copy the following literal'))
       text = user.split('\n').at(-1) ?? '';
     if (system.includes('PRIVATE_')) {

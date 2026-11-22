@@ -28,6 +28,33 @@ const run = (
 
 describe('user receives independently specified audit evidence', () => {
   it.each(['openai', 'anthropic', 'responses'] as const)(
+    'user receives an unambiguous expected literal in the %s priority challenge',
+    async (protocol) => {
+      // Given a protocol fixture treating punctuation attached to an unquoted literal as part of that literal.
+      relay.mode = 'literal-boundary';
+      // When the user runs the system-priority challenge.
+      const report = await run(['instruction_conflict'], protocol);
+      // Then the requested output boundary is unambiguous and the honoring endpoint passes.
+      expect(report.probes[0]?.verdict).toBe('pass');
+      expect(report.probes[0]?.observations).toMatchObject({ matched: true });
+      expect(report.findings).toEqual([]);
+    }
+  );
+  it('user still detects extra punctuation after an unambiguous expected literal', async () => {
+    // Given an endpoint appending a period to the explicitly requested literal.
+    relay.mode = 'append-punctuation';
+    // When the system-priority challenge is evaluated.
+    const report = await run(['instruction_conflict']);
+    // Then the output contract remains strict rather than stripping punctuation to manufacture a pass.
+    expect(report.probes[0]?.verdict).toBe('finding');
+    expect(report.probes[0]?.observations.received).toBe(
+      `${report.probes[0]?.observations.expected}.`
+    );
+    expect(report.findings.map((finding) => finding.code)).toEqual([
+      'system_priority_mismatch',
+    ]);
+  });
+  it.each(['openai', 'anthropic', 'responses'] as const)(
     'user can check system priority and literal integrity over %s',
     async (protocol) => {
       // Given a protocol endpoint honoring system priority and literal output.

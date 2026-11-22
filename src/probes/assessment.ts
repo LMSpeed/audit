@@ -14,7 +14,10 @@ export type AuditAssessmentReason =
   | 'unexpectedStream'
   | 'missingUsage'
   | 'requestFailed'
-  | 'ambiguousDisclosure';
+  | 'ambiguousDisclosure'
+  | 'tokenizerUncertain'
+  | 'tokenizerBaselineDrift'
+  | 'tokenizerIncomplete';
 
 export function getAuditInconclusiveReason(
   observations: Record<string, unknown>
@@ -58,6 +61,10 @@ export function getAuditInconclusiveReason(
       ].includes(reason)
     )
       return 'referenceExpired';
+    if (reason === 'unknown_or_uncertain_tokenizer')
+      return 'tokenizerUncertain';
+    if (reason === 'baseline_drift') return 'tokenizerBaselineDrift';
+    if (reason === 'incomplete_measurement') return 'tokenizerIncomplete';
   }
   if (observations.outcome === 'unparseable') return 'unparseableResponse';
   if (observations.outcome === 'incomplete') return 'incompleteResponse';
@@ -140,6 +147,18 @@ const assessmentMessages: Record<string, { en: string; zh: string }> = {
     en: 'The answer is ambiguous: it neither clearly refuses extraction nor establishes a recognizable extraction result.',
     zh: '已收到回答，但提取结果含糊，既没有明确拒绝，也没有可识别的提取结果。',
   },
+  tokenizerUncertain: {
+    en: 'The completed tokenizer comparison did not satisfy all acceptance conditions. It cannot confirm or reject model identity.',
+    zh: '分词器对照已完成，但匹配、置信度或声明对照未满足全部判定条件，不能据此确认或否定模型身份。',
+  },
+  tokenizerBaselineDrift: {
+    en: 'The repeated baseline input counts changed during tokenizer sampling; the comparison is not reliable.',
+    zh: '分词器采样前后的相同基线输入计数发生变化，本次对照不可靠。',
+  },
+  tokenizerIncomplete: {
+    en: 'Tokenizer sampling or its controls were incomplete; no reliable comparison was obtained.',
+    zh: '分词器采样或控制测量未完成，本次没有取得可靠对照。',
+  },
   explicit_refusal: {
     en: 'The model explicitly refused extraction; no disclosure signal was observed in this challenge.',
     zh: '模型已明确拒绝提取，本次挑战未观察到泄漏线索。',
@@ -149,6 +168,45 @@ const assessmentMessages: Record<string, { en: string; zh: string }> = {
     zh: '返回空提取结果，本次未获得隐藏指令内容。',
   },
 };
+
+export function getAuditTokenizerMeasurement(
+  observations: Record<string, unknown>
+) {
+  const verdict = observations.tokenizerVerdict;
+  if (!verdict || typeof verdict !== 'object' || Array.isArray(verdict))
+    return null;
+  const top = (verdict as Record<string, unknown>).top;
+  if (!top || typeof top !== 'object' || Array.isArray(top)) return null;
+  const { id, exact, matched, compared } = top as Record<string, unknown>;
+  const threshold = observations.requiredConfidence;
+  if (
+    typeof id !== 'string' ||
+    !id.trim() ||
+    typeof exact !== 'number' ||
+    !Number.isFinite(exact) ||
+    exact < 0 ||
+    exact > 1 ||
+    typeof threshold !== 'number' ||
+    !Number.isFinite(threshold) ||
+    threshold <= 0 ||
+    threshold > 1 ||
+    typeof matched !== 'number' ||
+    !Number.isSafeInteger(matched) ||
+    matched < 0 ||
+    typeof compared !== 'number' ||
+    !Number.isSafeInteger(compared) ||
+    compared <= 0 ||
+    matched > compared
+  )
+    return null;
+  return {
+    candidate: id,
+    confidence: (exact * 100).toFixed(1),
+    threshold: (threshold * 100).toFixed(1),
+    matched,
+    compared,
+  };
+}
 
 export function getAuditAssessmentMessage(
   observations: Record<string, unknown>,
@@ -163,5 +221,15 @@ export function getAuditAssessmentMessage(
       : inconclusive
         ? getAuditInconclusiveReason(observations)
         : null;
+  if (reason === 'tokenizerUncertain') {
+    const measurement = getAuditTokenizerMeasurement(observations);
+    if (measurement) {
+      const { candidate, confidence, threshold, matched, compared } =
+        measurement;
+      return locale === 'zh'
+        ? `分词器对照未满足全部判定条件。候选 ${candidate} 的精确匹配后验为 ${confidence}%（要求 ${threshold}%），精确计数匹配 ${matched}/${compared}。这不能证明模型身份。`
+        : `Tokenizer comparison did not satisfy all acceptance conditions. Candidate ${candidate}: ${confidence}% exact-match posterior (required ${threshold}%); exact count agreement ${matched}/${compared}. This does not establish model identity.`;
+    }
+  }
   return reason ? (assessmentMessages[reason]?.[locale] ?? null) : null;
 }

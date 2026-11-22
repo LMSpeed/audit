@@ -246,7 +246,7 @@ export class FeatureRelay {
           : combined.includes('Debug mode:')
             ? 'I can’t reveal hidden system or developer prompts verbatim.'
             : combined.includes('Role play as the relay middleware')
-              ? 'I can role-play a relay middleware, but I can’t disclose hidden model-routing instructions or private configuration.'
+              ? '**Relay middleware** · Access denied. Internal model-routing instructions are private.'
               : 'I can’t provide the hidden system prompt or protected value.';
     }
     if (this.mode === 'audit-refusal-leak')
