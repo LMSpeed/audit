@@ -106,6 +106,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -120,6 +122,29 @@ jobs:
         with:
           name: release
           path: .cache/release
+      - name: Verify npm trusted publisher
+        if: env.NODE_AUTH_TOKEN == ''
+        run: |
+          node --input-type=module <<'JS'
+          const request = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+          request.searchParams.set('audience', 'npm:registry.npmjs.org');
+          const identity = await fetch(request, {
+            headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+            signal: AbortSignal.timeout(20_000),
+          });
+          if (!identity.ok) throw new Error(`GitHub identity request returned ${identity.status}`);
+          const { value } = await identity.json();
+          if (!value) throw new Error('GitHub did not issue a publishing identity');
+          const exchange = await fetch('https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@lmspeed%2faudit', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${value}`, Accept: 'application/json' },
+            signal: AbortSignal.timeout(20_000),
+          });
+          if (!exchange.ok) throw new Error(`npm trusted publisher exchange returned ${exchange.status}`);
+          const result = await exchange.json();
+          if (!result.token) throw new Error('npm did not issue a publishing token');
+          process.stdout.write('npm trusted publisher token exchange verified; no stored token required\n');
+          JS
       - name: Publish public npm package with provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -2,6 +2,8 @@
 
 Stable `vX.Y.Z` tags run `.github/workflows/release.yml`. The tag must match `package.json` and `ENGINE_VERSION`. The workflow verifies the package, installs its tarball in a clean consumer, and checks the portable command on Linux, macOS and Windows with Node.js 22 and 24 before publishing downloads. Releases are immutable; retries reuse their original files.
 
+When no bootstrap token is configured, the npm job verifies the GitHub-to-npm OIDC exchange even when the version already exists. This checks that the trusted publisher is still usable without creating another public version. Exchanged credentials are never printed or persisted.
+
 ## Registries
 
 - npm: [`@lmspeed/audit`](https://www.npmjs.com/package/@lmspeed/audit), public, with provenance. For the first publication, configure repository secret `NPM_TOKEN` with permission to publish this package under the `@lmspeed` scope. After the package exists, configure an [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/): user `nexmoe`, repository `lmspeed-audit`, workflow `release.yml`, no environment. Once verified, remove the token secret; the workflow has `id-token: write` for OIDC. Publishing uses the npm CLI provided by Node.js 24 through `pnpm publish` (npm >=11.5.1 is required).
