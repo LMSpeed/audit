@@ -8,7 +8,7 @@
 
 ## 注册表
 
-- npm：[`@lmspeed/audit`](https://www.npmjs.com/package/@lmspeed/audit)，公开并附带来源证明。首次发布需配置仓库 secret `NPM_TOKEN`，授权在 `@lmspeed` scope 下发布此包。包创建后，配置 [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/)：组织 `LMSpeed`、仓库 `audit`、工作流 `release.yml`，不设置 environment。验证后移除令牌 secret；工作流使用 `id-token: write` 进行 OIDC。发布通过 `pnpm publish` 使用 Node.js 24 提供的 npm CLI（需要 npm >=11.5.1）。
+- npm：[`@lmspeed/audit`](https://www.npmjs.com/package/@lmspeed/audit)，公开并附带来源证明。首次发布需配置仓库 secret `NPM_TOKEN`，授权在 `@lmspeed` scope 下发布此包。包创建后，配置 [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/)：组织 `LMSpeed`、仓库 `Audit`、工作流 `release.yml`，不设置 environment。验证后移除令牌 secret；工作流使用 `id-token: write` 进行 OIDC。发布通过 `pnpm publish` 使用 Node.js 24 提供的 npm CLI（需要 npm >=11.5.1）。
 - GitHub Packages：[`@lmspeed/audit`](https://github.com/lmspeed/audit/pkgs/npm/audit)，使用本仓库的 `GITHUB_TOKEN`。GitHub 要求包 scope 与仓库 owner 一致。两个注册表使用相同包名；只有使用 GitHub Packages 时才将 `@lmspeed` scope 指向该注册表。GitHub 首次创建的包默认私有，首次发布后需在包设置中改为 **Public**。即使公开的 GitHub npm 包，安装仍需 `read:packages` 令牌。参见 [GitHub 注册表文档](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry)。
 
 ## Homebrew、Scoop 与下载

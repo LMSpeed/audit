@@ -13,7 +13,7 @@ Canonical repository: https://github.com/lmspeed/audit. Both npm registries use 
 
 The user requires releases to be controlled through GitHub Actions. Use `.github/workflows/release.yml` for npm, GitHub Packages, GitHub Releases, Homebrew and Scoop publication. Local commands may build and verify artifacts; routine publication must not use local `npm publish`, `pnpm publish` or manual release-asset uploads.
 
-1. Update `package.json`, `ENGINE_VERSION` and both changelogs for a new version.
+1. Update `package.json`, `ENGINE_VERSION` and every localized changelog for a new version.
 2. Complete the local checks, commit the release, and push its stable `vX.Y.Z` tag. The tag automatically starts the release workflow.
 3. For a retry of an existing release using the current artifact format, trigger:
 
