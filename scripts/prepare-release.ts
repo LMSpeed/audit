@@ -133,25 +133,24 @@ end
   await writeFile(join(output, 'lmspeed-audit.rb'), formula);
   await writeFile(
     join(output, 'lmspeed-audit.json'),
-    `${JSON.stringify(
-      {
-        version,
-        description: 'Evidence-based LLM API and relay auditing',
-        homepage: 'https://lmspeed.net/audit',
-        license: 'Apache-2.0',
-        depends: 'nodejs-lts',
-        url: `${base}/${portableName}.zip`,
-        hash: hashes.get(`${portableName}.zip`),
-        extract_dir: 'lmspeed-audit',
-        bin: [['lmspeed-audit.cmd', 'lmspeed-audit']],
-        checkver: { github: 'https://github.com/nexmoe/lmspeed-audit' },
-        autoupdate: {
-          url: 'https://github.com/nexmoe/lmspeed-audit/releases/download/v$version/lmspeed-audit-$version.zip',
-        },
-      },
-      null,
-      4
-    )}\n`
+    `{
+  "version": "${version}",
+  "description": "Evidence-based LLM API and relay auditing",
+  "homepage": "https://lmspeed.net/audit",
+  "license": "Apache-2.0",
+  "depends": "nodejs-lts",
+  "url": "${base}/${portableName}.zip",
+  "hash": "${hashes.get(`${portableName}.zip`)}",
+  "extract_dir": "lmspeed-audit",
+  "bin": [["lmspeed-audit.cmd", "lmspeed-audit"]],
+  "checkver": {
+    "github": "https://github.com/nexmoe/lmspeed-audit"
+  },
+  "autoupdate": {
+    "url": "https://github.com/nexmoe/lmspeed-audit/releases/download/v$version/lmspeed-audit-$version.zip"
+  }
+}
+`
   );
   for (const asset of ['lmspeed-audit.rb', 'lmspeed-audit.json']) {
     assets.push(asset);

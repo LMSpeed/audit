@@ -7,7 +7,7 @@
 [![CI](https://github.com/nexmoe/lmspeed-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/nexmoe/lmspeed-audit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12-339933.svg)](./package.json)
-[![Engine](https://img.shields.io/badge/Engine-0.3.1-0969da.svg)](./package.json)
+[![Engine](https://img.shields.io/badge/Engine-0.3.2-0969da.svg)](./package.json)
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 

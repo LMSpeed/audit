@@ -45,7 +45,7 @@ try {
   if (values.version) process.stdout.write(`${ENGINE_VERSION}\n`);
   else if (values.help || !positionals.length)
     process.stdout.write(
-      'lmspeed-audit scan --url <base-url> --model <model-id> [--protocol auto|openai|anthropic|responses] [--profile connectivity|general|web3|full] [--probes id,id] [--config local.json] [--format json|markdown|text] [--key-env PROVIDER_API_KEY] [--output new-file]\nlmspeed-audit collect-baseline --config collection.json [--output new-file]\nlmspeed-audit list [--format json]\nCredentials are read from environment variables. Local HTTP/private targets require --allow-private. All target, reference and judge requests share resource limits. Exit: 0 no findings, 1 findings, 2 incomplete/error.\n'
+      'lmspeed-audit scan --url <base-url> --model <model-id> [--protocol auto|openai|anthropic|responses] [--profile connectivity|general|web3|full] [--probes id,id] [--config local.json] [--format json|markdown|text] [--key-env PROVIDER_API_KEY] [--output new-file]\nlmspeed-audit collect-baseline --config collection.json [--output new-file]\nlmspeed-audit list [--format json]\nCredentials are read from environment variables. Local HTTP/private targets require --allow-private. All target, reference and judge requests share resource limits. Exit: 0 no findings, 1 findings, 2 incomplete/error.\nOnline audit and shareable reports: https://lmspeed.net/audit\n'
     );
   else if (positionals[0] === 'list' && positionals.length === 1)
     process.stdout.write(

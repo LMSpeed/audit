@@ -32,7 +32,7 @@ import type {
   ProbeResult,
 } from './schema/index.js';
 import { validateDetectorConfiguration } from './schema/validate.js';
-export const ENGINE_VERSION = '0.3.1';
+export const ENGINE_VERSION = '0.3.2';
 export const RULESET_VERSION = 'independent-2026-11-22.1';
 export const AUDIT_PROBE_IDS = [
   ...RELAY_AUDIT_STEP_IDS,

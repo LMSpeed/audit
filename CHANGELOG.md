@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 - 2026-11-22
+
+### Improvements
+
+- CLI help now links directly to the online audit and shareable reports on LMSpeed.
+
 ## 0.3.1 - 2026-11-22
 
 ### What's New

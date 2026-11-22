@@ -19,3 +19,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm pack --pack-destination .cache/package
+      - run: pnpm release:prepare
+      - run: pnpm release:smoke
+      - name: Verify generated installer formatting
+        run: |
+          pnpm exec biome format --stdin-file-path=bucket/lmspeed-audit.json < .cache/release/lmspeed-audit.json > .cache/formatted-scoop.json
+          diff -u .cache/release/lmspeed-audit.json .cache/formatted-scoop.json

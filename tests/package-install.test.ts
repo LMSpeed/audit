@@ -68,6 +68,7 @@ describe('user installs the published CLI without the source repository', () => 
     );
     // When the user requests its version, catalog and documented SDK exports.
     const version = await exec(process.execPath, [cli, '--version']);
+    const help = await exec(process.execPath, [cli, '--help']);
     const catalog = await exec(process.execPath, [
       cli,
       'list',
@@ -85,6 +86,7 @@ describe('user installs the published CLI without the source repository', () => 
     );
     // Then both CLI and SDK resolve entirely from the installed package.
     expect(version.stdout.trim()).toBe(ENGINE_VERSION);
+    expect(help.stdout).toContain('https://lmspeed.net/audit');
     expect(JSON.parse(catalog.stdout)).toEqual(AUDIT_PROBE_IDS);
     expect(loaded.stdout).toBe('exports available');
   });
