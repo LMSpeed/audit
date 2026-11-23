@@ -1,9 +1,11 @@
 import { lookup } from 'node:dns/promises';
+import { addAbortListener } from 'node:events';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 import { checkServerIdentity } from 'node:tls';
 import type { AuditOptions } from '../schema/index.js';
+import type { FetchCompletion } from './completion.js';
 import { createTokenUsageCounter } from './token-usage.js';
 
 export function isPublicAddress(address: string) {
@@ -33,8 +35,10 @@ export function isPublicAddress(address: string) {
 }
 export async function validateTarget(
   value: string,
-  policy: 'public' | 'local' = 'public'
+  policy: 'public' | 'local' = 'public',
+  signal?: AbortSignal
 ) {
+  signal?.throwIfAborted();
   const url = new URL(value);
   if (url.username || url.password || url.search || url.hash)
     throw new Error(
@@ -47,7 +51,7 @@ export async function validateTarget(
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const addresses = isIP(hostname)
     ? [{ address: hostname, family: isIP(hostname) }]
-    : await lookup(hostname, { all: true });
+    : await resolveAddresses(hostname, signal);
   if (
     !addresses.length ||
     (policy === 'public' &&
@@ -56,6 +60,16 @@ export async function validateTarget(
     throw new Error('Audit target resolves to a private or reserved address');
   return { url, address: addresses[0]!.address };
 }
+
+function resolveAddresses(hostname: string, signal?: AbortSignal) {
+  const addresses = lookup(hostname, { all: true });
+  if (!signal) return addresses;
+  return new Promise<Awaited<typeof addresses>>((resolve, reject) => {
+    const abort = addAbortListener(signal, () => reject(signal.reason));
+    void addresses.then(resolve, reject).finally(() => abort[Symbol.dispose]());
+  });
+}
+
 export function createAuditTransport(options: AuditOptions) {
   const usage = { requests: 0, inputTokensEstimated: 0 };
   const tokens = createTokenUsageCounter();
@@ -63,6 +77,7 @@ export function createAuditTransport(options: AuditOptions) {
   const maxInputTokens = options.limits?.maxInputTokens ?? 2_000_000;
   const maxResponseBytes = options.limits?.maxResponseBytes ?? 4_000_000;
   const maxDuration = options.limits?.maxDurationMs ?? 600_000;
+  const maxRequestDuration = options.limits?.maxRequestDurationMs;
   for (const value of [
     maxRequests,
     maxInputTokens,
@@ -71,6 +86,15 @@ export function createAuditTransport(options: AuditOptions) {
   ])
     if (!Number.isSafeInteger(value) || value <= 0)
       throw new Error('Audit limits must be positive safe integers');
+  if (
+    maxRequestDuration !== undefined &&
+    (!Number.isSafeInteger(maxRequestDuration) ||
+      maxRequestDuration < 1 ||
+      maxRequestDuration > 2_147_483_647)
+  )
+    throw new Error(
+      'Request duration limit must be between 1 and 2147483647 milliseconds'
+    );
   const controller = new AbortController();
   const deadline = setTimeout(
     () => controller.abort(new Error('Audit duration budget exceeded')),
@@ -86,113 +110,124 @@ export function createAuditTransport(options: AuditOptions) {
       throw new Error('Audit request budget exceeded');
     usage.requests++;
   };
+  const fetch: FetchCompletion = async (input, init = {}) => {
+    const requestSignal = init.signal
+      ? AbortSignal.any([signal, init.signal])
+      : signal;
+    requestSignal.throwIfAborted();
+    const body = typeof init.body === 'string' ? init.body : '';
+    const estimated = Math.ceil(body.length / 4);
+    if (
+      usage.requests >= maxRequests ||
+      usage.inputTokensEstimated + estimated > maxInputTokens
+    )
+      throw new Error('Audit request or input token budget exceeded');
+    const { url, address } = await validateTarget(
+      String(input),
+      options.networkPolicy,
+      requestSignal
+    );
+    requestSignal.throwIfAborted();
+    if (
+      usage.requests >= maxRequests ||
+      usage.inputTokensEstimated + estimated > maxInputTokens
+    )
+      throw new Error('Audit request or input token budget exceeded');
+    usage.requests++;
+    usage.inputTokensEstimated += estimated;
+    const recordTokens = tokens.begin(url, init.method ?? 'GET');
+    return new Promise<Response>((resolve, reject) => {
+      const request = (url.protocol === 'https:' ? httpsRequest : httpRequest)(
+        {
+          hostname: address,
+          port: url.port || undefined,
+          method: init.method ?? 'GET',
+          path: url.pathname + url.search,
+          headers: {
+            ...Object.fromEntries(new Headers(init.headers).entries()),
+            host: url.host,
+          },
+          servername: url.hostname,
+          checkServerIdentity: (_host, cert) =>
+            checkServerIdentity(url.hostname, cert),
+          signal: requestSignal,
+        },
+        (response) => {
+          if (
+            (response.statusCode ?? 0) >= 300 &&
+            (response.statusCode ?? 0) < 400
+          ) {
+            response.resume();
+            reject(
+              new Error('Audit redirects are disabled to protect credentials')
+            );
+            return;
+          }
+          const chunks: Buffer[] = [];
+          let bytes = 0;
+          response.on('data', (chunk: Buffer) => {
+            bytes += chunk.length;
+            if (bytes > maxResponseBytes) {
+              request.destroy(new Error('Audit response byte budget exceeded'));
+              return;
+            }
+            chunks.push(chunk);
+          });
+          response.on('error', reject);
+          response.on('aborted', () =>
+            reject(new Error('Upstream response was aborted'))
+          );
+          response.on('end', () => {
+            const headers = new Headers();
+            for (const [name, value] of Object.entries(response.headers))
+              if (value !== undefined)
+                headers.set(
+                  name,
+                  Array.isArray(value) ? value.join(', ') : value
+                );
+            const status = response.statusCode ?? 502;
+            const body = Buffer.concat(chunks);
+            recordTokens(
+              body.toString('utf8'),
+              headers.get('content-type') ?? '',
+              status
+            );
+            resolve(
+              new Response(
+                [204, 205, 304].includes(status) ? null : new Uint8Array(body),
+                { status, headers }
+              )
+            );
+          });
+        }
+      );
+      request.on('error', reject);
+      request.end(body || undefined);
+    }).catch((error: unknown) => {
+      requestSignal.throwIfAborted();
+      throw error;
+    });
+  };
   return {
     usage,
     tokenUsage: () => tokens.snapshot(),
     signal,
     reserveRequest,
     close: () => clearTimeout(deadline),
-    fetch: async (
-      input: string | URL,
-      init: RequestInit = {}
-    ): Promise<Response> => {
-      signal.throwIfAborted();
-      const body = typeof init.body === 'string' ? init.body : '';
-      const estimated = Math.ceil(body.length / 4);
-      if (
-        usage.requests >= maxRequests ||
-        usage.inputTokensEstimated + estimated > maxInputTokens
-      )
-        throw new Error('Audit request or input token budget exceeded');
-      const { url, address } = await validateTarget(
-        String(input),
-        options.networkPolicy
-      );
-      signal.throwIfAborted();
-      if (
-        usage.requests >= maxRequests ||
-        usage.inputTokensEstimated + estimated > maxInputTokens
-      )
-        throw new Error('Audit request or input token budget exceeded');
-      usage.requests++;
-      usage.inputTokensEstimated += estimated;
-      const recordTokens = tokens.begin(url, init.method ?? 'GET');
-      return new Promise<Response>((resolve, reject) => {
-        const request = (
-          url.protocol === 'https:' ? httpsRequest : httpRequest
-        )(
-          {
-            hostname: address,
-            port: url.port || undefined,
-            method: init.method ?? 'GET',
-            path: url.pathname + url.search,
-            headers: {
-              ...Object.fromEntries(new Headers(init.headers).entries()),
-              host: url.host,
-            },
-            servername: url.hostname,
-            checkServerIdentity: (_host, cert) =>
-              checkServerIdentity(url.hostname, cert),
-            signal: init.signal
-              ? AbortSignal.any([signal, init.signal])
-              : signal,
-          },
-          (response) => {
-            if (
-              (response.statusCode ?? 0) >= 300 &&
-              (response.statusCode ?? 0) < 400
-            ) {
-              response.resume();
-              reject(
-                new Error('Audit redirects are disabled to protect credentials')
-              );
-              return;
-            }
-            const chunks: Buffer[] = [];
-            let bytes = 0;
-            response.on('data', (chunk: Buffer) => {
-              bytes += chunk.length;
-              if (bytes > maxResponseBytes) {
-                request.destroy(
-                  new Error('Audit response byte budget exceeded')
-                );
-                return;
-              }
-              chunks.push(chunk);
-            });
-            response.on('error', reject);
-            response.on('aborted', () =>
-              reject(new Error('Upstream response was aborted'))
+    fetch:
+      maxRequestDuration === undefined
+        ? fetch
+        : (input: string | URL, init: RequestInit = {}) => {
+            const requestController = new AbortController();
+            const timeout = setTimeout(() => {
+              requestController.abort(new Error('Audit request timed out'));
+            }, maxRequestDuration).unref();
+            const requestSignal = init.signal
+              ? AbortSignal.any([init.signal, requestController.signal])
+              : requestController.signal;
+            return fetch(input, { ...init, signal: requestSignal }).finally(
+              () => clearTimeout(timeout)
             );
-            response.on('end', () => {
-              const headers = new Headers();
-              for (const [name, value] of Object.entries(response.headers))
-                if (value !== undefined)
-                  headers.set(
-                    name,
-                    Array.isArray(value) ? value.join(', ') : value
-                  );
-              const status = response.statusCode ?? 502;
-              const body = Buffer.concat(chunks);
-              recordTokens(
-                body.toString('utf8'),
-                headers.get('content-type') ?? '',
-                status
-              );
-              resolve(
-                new Response(
-                  [204, 205, 304].includes(status)
-                    ? null
-                    : new Uint8Array(body),
-                  { status, headers }
-                )
-              );
-            });
-          }
-        );
-        request.on('error', reject);
-        request.end(body || undefined);
-      });
-    },
+          },
   };
 }

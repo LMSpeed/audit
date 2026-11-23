@@ -19,11 +19,11 @@ import {
   probeStructuredOutput,
   probeTools,
 } from './probes/capabilities.js';
-import { CAPABILITY_IDS } from './probes/catalog.js';
 import { probeConditionalInjection } from './probes/conditional.js';
 import { probeInfrastructure } from './probes/infrastructure.js';
 import { probeQuality, probeQualityComparison } from './probes/quality.js';
 import { result as makeResult } from './probes/results.js';
+import type { FetchCompletion } from './protocols/completion.js';
 import { createProbeEvidence } from './protocols/evidence.js';
 import { createAuditTransport, validateTarget } from './protocols/transport.js';
 import { redactRelayAuditText } from './redaction.js';
@@ -97,6 +97,60 @@ export function createAuditPlan(input: AuditInput) {
     throw new Error('Unknown or empty audit probe selection');
   return requested;
 }
+async function executeProbe(
+  id: string,
+  input: AuditInput,
+  fetch: FetchCompletion,
+  options: AuditOptions,
+  reserveRequest: () => void
+): Promise<ProbeResult> {
+  switch (id) {
+    case 'token_injection':
+      return input.capabilities?.tokenBaselines
+        ? probeBoundary(id, input, fetch, options)
+        : makeResult(
+            id,
+            performance.now(),
+            {
+              reason: 'A calibrated model-specific token baseline is required',
+            },
+            [],
+            'unsupported'
+          );
+    case 'infrastructure_recon':
+      return probeInfrastructure(input, fetch, options, reserveRequest);
+    case 'tool_calling':
+      return probeTools(input, fetch);
+    case 'structured_output':
+      return probeStructuredOutput(input, fetch);
+    case 'image_understanding':
+      return probeMedia(input, fetch, 'image');
+    case 'pdf_understanding':
+      return probeMedia(input, fetch, 'pdf');
+    case 'context_recall':
+      return probeContextRecall(input, fetch);
+    case 'stream_consistency':
+      return probeStreamConsistency(input, fetch);
+    case 'quality_canary':
+      return probeQuality(input, fetch);
+    case 'quality_comparison':
+      return probeQualityComparison(input, fetch);
+    case 'conditional_injection':
+      return probeConditionalInjection(input, fetch);
+    case 'model_fingerprint':
+      return probeModelFingerprint(input, fetch);
+    case 'tokenizer_fingerprint':
+      return probeTokenizer(input, fetch);
+    case 'numeric_fingerprint':
+      return probeNumericFingerprint(input, fetch);
+    default:
+      return probeBoundary(id, input, fetch, options);
+  }
+}
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 export async function executeAudit(
   input: AuditInput,
   options: AuditOptions = {},
@@ -105,10 +159,36 @@ export async function executeAudit(
   if (!input.apiKey?.trim() || !input.target.modelId?.trim())
     throw new Error('API key and model ID are required');
   const requested = createAuditPlan(input);
-  await validateTarget(input.target.baseUrl, options.networkPolicy);
+  const concurrency = options.probeConcurrency ?? 1;
+  const probeDuration = options.limits?.maxProbeDurationMs;
+  let retriesRemaining = options.limits?.maxTransientRetries ?? 0;
+  if (!Number.isSafeInteger(retriesRemaining) || retriesRemaining < 0)
+    throw new Error('Transient retry limit must be a nonnegative safe integer');
+  const reserveRetry = () => {
+    if (retriesRemaining === 0) return false;
+    retriesRemaining--;
+    return true;
+  };
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1)
+    throw new Error('Probe concurrency must be a positive safe integer');
+  if (
+    probeDuration !== undefined &&
+    (!Number.isSafeInteger(probeDuration) ||
+      probeDuration < 1 ||
+      probeDuration > 2_147_483_647)
+  )
+    throw new Error(
+      'Probe duration limit must be between 1 and 2147483647 milliseconds'
+    );
+
   const startedAt = new Date().toISOString();
-  const transport = createAuditTransport(options);
-  const results: ProbeResult[] = [];
+  const controller = new AbortController();
+  const workSignal = options.signal
+    ? AbortSignal.any([controller.signal, options.signal])
+    : controller.signal;
+  const transport = createAuditTransport({ ...options, signal: workSignal });
+  const resultsById = new Map<string, ProbeResult>();
+  const stepsById = new Map<string, RelayAuditEngineStep>();
   let legacy: RelayAuditEngineOutput | undefined;
   const secrets = [
     input.apiKey,
@@ -122,10 +202,87 @@ export async function executeAudit(
         text
       )
     );
-  try {
-    for (const id of requested) {
-      const evidence = createProbeEvidence(transport.fetch, scrub);
-      transport.signal.throwIfAborted();
+
+  // Keep awaited progress and persistence callbacks ordered while requests overlap.
+  let updates = Promise.resolve();
+  const publish = (update: () => Promise<void>) => {
+    updates = updates.then(() => {
+      workSignal.throwIfAborted();
+      return update();
+    });
+    return updates;
+  };
+  const complete = (probe: ProbeResult, missedDeadline = false) =>
+    publish(async () => {
+      resultsById.set(probe.id, probe);
+      if (probe.id !== 'channel_classifier') {
+        const step = capabilityStep(
+          missedDeadline ? { ...probe, execution: 'error' } : probe
+        );
+        stepsById.set(probe.id, step);
+        const steps = requested.flatMap((id) => {
+          const finished = stepsById.get(id);
+          return finished ? [finished] : [];
+        });
+        legacy = {
+          version: 'lmspeed-relay-audit-node-v1',
+          targetUrl: input.target.baseUrl,
+          modelId: input.target.modelId,
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          summary: summarizeLegacyAudit(
+            { ...input.target, apiKey: input.apiKey },
+            steps
+          ),
+          signals: {},
+          requestedStepIds: steps.map(({ id }) => id),
+          steps,
+          tokenUsage: transport.tokenUsage(),
+          provenance: {
+            engineVersion: ENGINE_VERSION,
+            rulesetVersion: RULESET_VERSION,
+            assessmentPolicy: 'lmspeed-independent-evidence-v3',
+            coverage: {
+              requested: [...requested],
+              inconclusive: requested.filter(
+                (id) => resultsById.get(id)?.verdict === 'inconclusive'
+              ),
+            },
+          },
+        };
+        await legacyOptions.onProgress?.({
+          event: 'progress',
+          stage: step.id,
+          status: step.status === 'failed' ? 'failed' : 'completed',
+          severity: step.severity,
+          messageEn: step.summaryEn,
+          messageZh: step.summaryZh,
+        });
+        await legacyOptions.onStepComplete?.(legacy);
+      }
+      await options.onEvent?.({
+        type: 'probe_completed',
+        probeId: probe.id,
+        result: probe,
+      });
+    });
+  const run = async (id: string) => {
+    workSignal.throwIfAborted();
+    if (transport.signal.aborted) {
+      await complete(
+        {
+          id,
+          execution: 'skipped',
+          verdict: 'inconclusive',
+          durationMs: 0,
+          observations: { reason: errorMessage(transport.signal.reason) },
+          findings: [],
+        },
+        true
+      );
+      return;
+    }
+    await publish(async () => {
       await options.onEvent?.({ type: 'probe_started', probeId: id });
       if (id !== 'channel_classifier')
         await legacyOptions.onProgress?.({
@@ -133,129 +290,100 @@ export async function executeAudit(
           stage: id as RelayAuditEngineStep['id'],
           status: 'running',
         });
-      let result: ProbeResult;
-      if (id === 'token_injection' && !input.capabilities?.tokenBaselines) {
-        result = {
-          id,
-          execution: 'unsupported',
-          verdict: 'inconclusive',
-          durationMs: 0,
-          findings: [],
-          observations: {
-            reason: 'A calibrated model-specific token baseline is required',
-          },
-        };
-      } else if (id === 'infrastructure_recon') {
-        result = await probeInfrastructure(
-          input,
-          evidence.fetch,
-          { ...options, signal: transport.signal },
-          transport.reserveRequest
-        );
-      } else if (
-        CAPABILITY_IDS.includes(id as (typeof CAPABILITY_IDS)[number])
-      ) {
-        result =
-          id === 'tool_calling'
-            ? await probeTools(input, evidence.fetch)
-            : id === 'structured_output'
-              ? await probeStructuredOutput(input, evidence.fetch)
-              : id === 'image_understanding'
-                ? await probeMedia(input, evidence.fetch, 'image')
-                : id === 'pdf_understanding'
-                  ? await probeMedia(input, evidence.fetch, 'pdf')
-                  : id === 'context_recall'
-                    ? await probeContextRecall(input, evidence.fetch)
-                    : id === 'stream_consistency'
-                      ? await probeStreamConsistency(input, evidence.fetch)
-                      : id === 'quality_canary'
-                        ? await probeQuality(input, evidence.fetch)
-                        : id === 'quality_comparison'
-                          ? await probeQualityComparison(input, evidence.fetch)
-                          : id === 'conditional_injection'
-                            ? await probeConditionalInjection(
-                                input,
-                                evidence.fetch
-                              )
-                            : id === 'model_fingerprint'
-                              ? await probeModelFingerprint(
-                                  input,
-                                  evidence.fetch
-                                )
-                              : id === 'tokenizer_fingerprint'
-                                ? await probeTokenizer(input, evidence.fetch)
-                                : id === 'numeric_fingerprint'
-                                  ? await probeNumericFingerprint(
-                                      input,
-                                      evidence.fetch
-                                    )
-                                  : makeResult(
-                                      id,
-                                      performance.now(),
-                                      {
-                                        reason:
-                                          'Reference configuration required',
-                                      },
-                                      [],
-                                      'unsupported'
-                                    );
-      } else {
-        result = await probeBoundary(id, input, evidence.fetch, options);
-      }
-      transport.signal.throwIfAborted();
-      result = JSON.parse(
-        scrub(JSON.stringify(evidence.attach(result)))
-      ) as ProbeResult;
-      results.push(result);
-      if (id !== 'channel_classifier') {
-        const step = capabilityStep(result);
-        legacy ??= {
-          version: 'lmspeed-relay-audit-node-v1',
-          targetUrl: input.target.baseUrl,
-          modelId: input.target.modelId,
-          startedAt,
-          finishedAt: startedAt,
-          summary: {
-            verdict: 'unknown',
-            headlineZh: '检测中',
-            headlineEn: 'Audit in progress',
-          },
-          signals: {},
-          requestedStepIds: [],
-          steps: [],
-        };
-        legacy.steps.push(step);
-        legacy.requestedStepIds!.push(step.id);
-        legacy.finishedAt = new Date().toISOString();
-        legacy.tokenUsage = transport.tokenUsage();
-        legacy.provenance = {
-          engineVersion: ENGINE_VERSION,
-          rulesetVersion: RULESET_VERSION,
-          assessmentPolicy: 'lmspeed-independent-evidence-v3',
-          coverage: {
-            requested: [...requested],
-            inconclusive: results
-              .filter((probe) => probe.verdict === 'inconclusive')
-              .map((probe) => probe.id),
-          },
-        };
-        legacy.summary = summarizeLegacyAudit(
-          { ...input.target, apiKey: input.apiKey },
-          legacy.steps
-        );
-
-        await legacyOptions.onProgress?.({
-          event: 'progress',
-          stage: step.id,
-          status: result.execution === 'error' ? 'failed' : 'completed',
-          severity: step.severity,
-          messageEn: step.summaryEn,
-          messageZh: step.summaryZh,
-        });
-        await legacyOptions.onStepComplete?.(legacy);
-      }
-      await options.onEvent?.({ type: 'probe_completed', probeId: id, result });
+    });
+    const started = performance.now();
+    const probeController = new AbortController();
+    const signal = AbortSignal.any([transport.signal, probeController.signal]);
+    const deadline =
+      probeDuration === undefined
+        ? undefined
+        : setTimeout(() => {
+            probeController.abort(new Error('Audit probe timed out'));
+          }, probeDuration).unref();
+    const evidence = createProbeEvidence(
+      (url, init) =>
+        transport.fetch(url, {
+          ...init,
+          signal: init?.signal
+            ? AbortSignal.any([signal, init.signal])
+            : signal,
+        }),
+      scrub,
+      signal,
+      id === 'context_window' ||
+        id === 'context_recall' ||
+        id === 'latency_variance'
+        ? undefined
+        : reserveRetry
+    );
+    let probe: ProbeResult;
+    try {
+      signal.throwIfAborted();
+      probe = await executeProbe(
+        id,
+        input,
+        evidence.fetch,
+        { ...options, signal },
+        () => {
+          signal.throwIfAborted();
+          transport.reserveRequest();
+        }
+      );
+    } catch (error) {
+      probe = makeResult(
+        id,
+        started,
+        { reason: errorMessage(error) },
+        [],
+        'error'
+      );
+    } finally {
+      if (deadline) clearTimeout(deadline);
     }
+    workSignal.throwIfAborted();
+    if (signal.aborted)
+      probe = {
+        ...probe,
+        execution: 'error',
+        verdict: probe.findings.length ? 'finding' : 'inconclusive',
+        observations: {
+          ...probe.observations,
+          reason: errorMessage(signal.reason),
+        },
+      };
+    await complete(
+      JSON.parse(scrub(JSON.stringify(evidence.attach(probe)))) as ProbeResult
+    );
+  };
+
+  try {
+    await validateTarget(
+      input.target.baseUrl,
+      options.networkPolicy,
+      transport.signal
+    );
+    // Measure latency without other traffic from the same audit.
+    const isolateLatency =
+      concurrency > 1 && requested.includes('latency_variance');
+    const queue = (
+      isolateLatency
+        ? requested.filter((id) => id !== 'latency_variance')
+        : requested
+    ).values();
+    const runWorker = async () => {
+      try {
+        for (const id of queue) await run(id);
+      } catch (error) {
+        controller.abort(error);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, requested.length) }, runWorker)
+    );
+    workSignal.throwIfAborted();
+    if (isolateLatency) await run('latency_variance');
+
+    const results = requested.map((id) => resultsById.get(id)!);
     const findings = results.flatMap((result) => result.findings);
     const report: AuditReport = {
       schemaVersion: '1',

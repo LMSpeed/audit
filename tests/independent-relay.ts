@@ -4,6 +4,8 @@ import { array, object } from '../src/protocols/completion.js';
 
 export class IndependentRelay {
   mode = 'healthy';
+  instructionPrefix = '';
+  instructionSuffix = '';
   requests = 0;
   model = 'audit-model';
   readonly server = createServer(async (req, res) => {
@@ -56,8 +58,8 @@ export class IndependentRelay {
       text =
         this.mode === 'ignore-system'
           ? '42'
-          : this.mode === 'append-punctuation'
-            ? `${required}.`
+          : this.mode === 'format-instruction'
+            ? `${this.instructionPrefix}${required}${this.instructionSuffix}`
             : required;
     if (user.startsWith('Copy the following literal'))
       text = user.split('\n').at(-1) ?? '';

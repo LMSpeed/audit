@@ -192,7 +192,7 @@ const report = await runAudit(
 console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 ```
 
-判定由库内部完成。提取拒绝识别兼容英文弯引号及中文、俄文拒绝表达；空 JSON 提取结果记为信息项，含糊回答仍保留无法判断。语义型 yes/no 任务允许句末标点，要求精确字面的任务继续严格比较。对未决检测，可从 `@lmspeed/audit/assessment` 导入 `getAuditInconclusiveReason` 取得供翻译的机器原因码。消费端应保留引擎判定，不在展示层另行改写。
+判定由库内部完成。提取拒绝识别兼容英文弯引号及中文、俄文拒绝表达；空 JSON 提取结果记为信息项，含糊回答仍保留无法判断。语义型 yes/no 任务允许句末标点，系统优先级检测容忍外层格式，字面复制任务继续严格比较。对未决检测，可从 `@lmspeed/audit/assessment` 导入 `getAuditInconclusiveReason` 取得供翻译的机器原因码。消费端应保留引擎判定，不在展示层另行改写。
 
 ---
 
@@ -209,7 +209,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 {
   "schemaVersion": "1",
   "engineVersion": "0.3.0",
-  "rulesetVersion": "independent-2026-11-23.4",
+  "rulesetVersion": "independent-2026-11-23.7",
   "target": {
     "baseUrl": "http://127.0.0.1:57215/v1",
     "modelId": "claude-sonnet-4-6",
@@ -322,13 +322,13 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 
 | 探针 ID | 触发方式 | 检测内容与证据边界 |
 | :--- | :--- | :--- |
-| `instruction_conflict` | 自动 | 系统消息要求精确返回随机 `ACK_*`，用户消息要求忽略前文计算乘法，检测优先级服从性（`system_priority_mismatch`） |
+| `instruction_conflict` | 自动 | 系统消息要求返回随机 `ACK_*`，用户消息要求忽略前文计算乘法；容忍首尾空白、外层引号/反引号和末尾句末标点，随机标记仍须完整一致且无额外正文（`system_priority_mismatch`） |
 | `stream_integrity` | 自动 / `connectivity` | 校验 SSE 事件结构、终结符（`[DONE]` / `message_stop` / `response.completed`）、流式模型名一致与用量单调递增 |
-| `context_window` | 自动 | 未配置长度时自动倍增并二分细化：最多 12 次请求、524,288 输入字符、4,096 字符精度；显式长度配置保留定点召回抽测。认证、限流和偶发异常不作为容量边界 |
+| `context_window` | 自动 | 逐步扩增输入并细化接口接受与明确超限拒绝之间的区间。`contextSearch` 默认从 32,768 字符起测，最多 4,194,304 字符、24 次请求，精度 4,096 字符，并受共享审计预算限制。未确认拒绝时只报告下限。标记召回单独报告。仅设置 `context.sizes` 时保留定点召回抽测 |
 | `context_recall` | 可选（`context`） | 在默认 `[0, 0.25, 0.5, 0.75, 1]` 等位置埋入随机 `FACT_*` 标记并在漏检时复核一次，确认 `context_recall_missing` |
 | `model_fingerprint` | 可选（`identity`） | 与经过验证的留出基线比对输出分布；样本不足、过期、配置不兼容或间隔不够时拒判 |
 | `numeric_fingerprint` | 自动；支持 `numericFingerprint` 覆盖 | 使用随包、SHA-256 固定的参考数据进行封闭集排序，有效期 30 天；运行时不下载数据 |
-| `tokenizer_fingerprint` | 自动；支持 `tokenizer` 覆盖 | 使用随包固定分词器库，有效期 90 天，最多 12 条自适应探针加首尾两次对照；漂移或不确定时拒判 |
+| `tokenizer_fingerprint` | 自动；支持 `tokenizer` 覆盖 | 使用随包分词器库，有效期 90 天，最多 12 条样本及 4 次对照。确认漂移时停止采样，证据不足时拒判 |
 
 参考数据由本包独立管理和随版本交付。SDK、CLI 与 LMSpeed 读取同一份只读 `assets/references` 快照，保留来源提交、原始日期、哈希和 MIT 署名。显式 `numericFingerprint`、`tokenizer` 配置优先；SDK 或配置 JSON 中设置 `referenceData: 'disabled'` 可关闭自动参考检测。过期、缺失或损坏的数据明确标记为未验证，不在运行时下载替代数据，不阻塞其他检测。模型分布复核仍需独立校准的 `identity` 基线。
 
@@ -369,7 +369,7 @@ lmspeed-audit list [--format json]
 | `--key-env` | `PROVIDER_API_KEY` | 读取目标 API 密钥的环境变量名 |
 | `--allow-private` | `false` | 允许访问纯 HTTP 及内网/回环调试地址 |
 | `--thinking` | `false` | 在能力描述中声明支持扩展思考 |
-| `--context-tokens` | — | 预期上下文长度（正整数），供 `context_window` 在未指定 `context.sizes` 时使用 |
+| `--context-tokens` | — | 声明的上下文长度（正整数），随自动扫描记录 |
 | `--max-requests` | `200` | 目标、参照及裁判请求共享的总请求数上限 |
 | `--max-input-tokens` | `2000000` | 预估总输入 Token 上限（按 `ceil(body.length / 4)` 累计） |
 | `--max-response-bytes` | `4000000` | 单次 HTTP 响应体最大缓存字节数 |
@@ -436,7 +436,7 @@ flowchart LR
 
 1. **防 SSRF 与凭据零泄露** — `validateTarget` 在每次出站前解析主机地址并校验 IPv4/IPv6 公网合法性，直接连接解析 IP 且关闭 HTTP 重定向；序列化报告和 stderr 异常输出都会剔除所有输入密钥及敏感 URL/配置赋值。
 2. **执行状态与判定解耦** — 将鉴权拦截、限流、未启用功能、缺少细分计费字段及过期参照分别标记为 `blocked`、`unsupported`、`skipped` 或 `inconclusive`，避免误判。
-3. **统计学克制与留出检验** — 行为分布指纹要求协议/生成参数严格一致、独立留出校验与有效间距阈值；分词器检测包含前后空提示词漂移检查和 `0.99` 后验停止条件。
+3. **统计学克制与留出检验** — 行为分布指纹要求协议与生成参数严格一致、独立留出校验与有效间距阈值。分词器采样前做两次空文本对照，结束时再做一次。首次发现样本计数低于基线时，额外复测一次来确认是否漂移。后验置信度达到 99% 时可提前结束采样，精确匹配要求置信度至少达到 90%。
 4. **本地工程验证（`pnpm check`）** — 依次执行 TypeScript 编译、Biome 代码规范检查、严格类型检查、AST 测试治理检查（禁止 mock、强制 `Given/When/Then` 与 `user ` 用户场景命名）、基于真实回环 HTTP 的 Vitest 测试套件（要求 `>= 70%` 分支覆盖率）及包边界验证 `pnpm verify:package`。自动测试针对真实回环服务端校验契约实现，一手线上模型识别准确率需由使用方配合校准基线另行评估。参见[检测验收场景](./docs/acceptance.zh-CN.md)与[检测策略与证据限制](./docs/strategy-review.zh-CN.md)。
 
 ---

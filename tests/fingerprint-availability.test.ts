@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -23,6 +23,60 @@ afterEach(async () => {
 const options = { networkPolicy: 'local' as const };
 
 describe('user skips fingerprint requests without matching reference data', () => {
+  it('user normalizes both requested and stored numeric model IDs', async () => {
+    // Given an internally consistent reference artifact whose IDs include provider namespaces and casing.
+    const detectorSha256 = await writeNumericFixture(directory, undefined, [
+      'vendor/A',
+      'vendor/B',
+    ]);
+    relay.mode = 'numbers';
+    // When a caller supplies a differently qualified form of the same ID.
+    const report = await runAudit(
+      {
+        target: { baseUrl, modelId: 'Other/A:tag' },
+        apiKey: 'alias-contract-key',
+        probes: ['numeric_fingerprint'],
+        numericFingerprint: { dataDirectory: directory, detectorSha256 },
+      },
+      options
+    );
+    // Then normalization is symmetric and the original API route is retained.
+    expect(report.usage.requests).toBe(3);
+    expect(report.probes[0]?.observations.referenceMatch).toMatchObject({
+      requestedModelId: 'Other/A:tag',
+      normalizedModelId: 'a',
+      referenceModelId: 'vendor/A',
+      matchType: 'id',
+    });
+  });
+  it('user does not spend tokens when one alias names multiple numeric reference groups', async () => {
+    // Given two distinct, valid reference groups advertising the same full alias.
+    const detectorSha256 = await writeNumericFixture(directory);
+    const path = join(directory, 'unified_bank.json');
+    const bank = JSON.parse(await readFile(path, 'utf8')) as {
+      models: Array<{ id: string; display_name: string }>;
+    };
+    for (const model of bank.models)
+      model.display_name = `${model.id}/shared-alias`;
+    await writeFile(path, JSON.stringify(bank));
+    // When the user requests that ambiguous alias.
+    const report = await runAudit(
+      {
+        target: { baseUrl, modelId: 'shared-alias' },
+        apiKey: 'alias-contract-key',
+        probes: ['numeric_fingerprint'],
+        numericFingerprint: { dataDirectory: directory, detectorSha256 },
+      },
+      options
+    );
+    // Then neither group is guessed and the report distinguishes ambiguity from missing data.
+    expect(report.probes[0]?.observations).toMatchObject({
+      reason: 'numeric_model_reference_ambiguous',
+      referenceCandidates: ['a', 'b'],
+    });
+    expect(report.coverage.skipped).toEqual(['numeric_fingerprint']);
+    expect(report.usage.requests).toBe(0);
+  });
   it('user skips both bundled fingerprints for a model absent from their reference banks', async () => {
     // Given a target with no numeric samples or tokenizer mapping in the shipped banks.
     // When the public SDK runs both fingerprint checks against a real HTTP endpoint.

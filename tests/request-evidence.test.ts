@@ -122,7 +122,13 @@ describe('user can verify the requests behind an audit judgment', () => {
   it('user can distinguish abbreviated long context from a complete request', async () => {
     // Given automatic expansion up to the bounded context-search maximum.
     // When the user inspects the largest submitted prompt.
-    const report = await runAudit(input(['context_window']), options);
+    const report = await runAudit(
+      {
+        ...input(['context_window']),
+        contextSearch: { maximumCharacters: 524288 },
+      },
+      options
+    );
     // Then the prompt has explicit length, digest and excerpts, and the expected markers remain recorded.
     const saved = exchanges(report.probes[0]!.observations);
     const body = object(object(saved.at(-1)!.request).body);
@@ -132,12 +138,12 @@ describe('user can verify the requests behind an audit judgment', () => {
       characters: 524288,
       sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       head: expect.stringContaining('FACT_'),
-      tail: expect.stringContaining('Return a JSON array'),
+      tail: expect.stringContaining('Return only a JSON array'),
     });
     const trials = report.probes[0]!.observations.trials as Array<
       Record<string, unknown>
     >;
-    expect(trials.at(-1)!.expectedMarkers).toHaveLength(3);
+    expect(trials.at(-1)!.expectedMarkers).toHaveLength(5);
     expect(JSON.stringify(report).length).toBeLessThan(200000);
   });
 

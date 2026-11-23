@@ -9,6 +9,11 @@ import {
 } from '../protocols/completion.js';
 import type { AuditInput } from '../schema/index.js';
 import { loadBundledNumericReference } from './bundled-references.js';
+import {
+  matchNumericReference,
+  type NumericReferenceMatch,
+  type NumericReferenceModel,
+} from './numeric-reference.js';
 
 export async function probeNumericFingerprint(
   input: AuditInput,
@@ -18,6 +23,7 @@ export async function probeNumericFingerprint(
   const started = performance.now();
   let acquired = 0;
   let reference: Record<string, string> | undefined;
+  let referenceMatch: NumericReferenceMatch | undefined;
   const abstain = (
     reason: string,
     observations: Record<string, unknown> = {}
@@ -30,6 +36,7 @@ export async function probeNumericFingerprint(
         reason,
         acquired,
         ...(reference ? { reference } : {}),
+        ...(referenceMatch ? { referenceMatch } : {}),
         ...observations,
       },
       [],
@@ -77,21 +84,18 @@ export async function probeNumericFingerprint(
       });
     const bank = JSON.parse(
       await readFile(join(config.dataDirectory, 'unified_bank.json'), 'utf8')
-    ) as { models: Array<{ id: string; response_count: number }> };
-    const modelId = input.target.modelId
-      .trim()
-      .toLowerCase()
-      .replace(/^.*\//, '')
-      .replace(/:.*$/, '');
-    if (
-      !bank.models.some(
-        (model) =>
-          model.id.toLowerCase() === modelId && model.response_count > 0
-      )
-    )
+    ) as { models: NumericReferenceModel[] };
+    const resolution = matchNumericReference(bank.models, input.target.modelId);
+    if (resolution.kind === 'ambiguous')
+      return abstain('numeric_model_reference_ambiguous', {
+        modelId: input.target.modelId,
+        referenceCandidates: resolution.candidates,
+      });
+    if (resolution.kind === 'missing')
       return abstain('numeric_model_reference_missing', {
         modelId: input.target.modelId,
       });
+    referenceMatch = resolution.match;
     const challenges = generateChallenges();
     const outputs = [];
     for (const challenge of challenges) {
@@ -132,6 +136,7 @@ export async function probeNumericFingerprint(
         detectorSha256: config.detectorSha256,
         builtAt: detector.builtAt,
         ...(reference ? { reference } : {}),
+        referenceMatch,
         attribution:
           'Closed-set ranking only. Unlisted models may rank highly; no identity pass or model-substitution finding is issued.',
       },

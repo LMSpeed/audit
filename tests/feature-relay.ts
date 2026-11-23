@@ -21,7 +21,11 @@ export class FeatureRelay {
   degraded = false;
   conditional = false;
   tokenizerDrift = false;
+  disconnectAbove = Number.POSITIVE_INFINITY;
+  disconnectsRemaining = 0;
   contextLimit = Number.POSITIVE_INFINITY;
+  invalidRequestAbove = Number.POSITIVE_INFINITY;
+  payloadLimit = Number.POSITIVE_INFINITY;
   recallLimit = Number.POSITIVE_INFINITY;
   private tokenizerBaselines = 0;
   readonly server = createServer((request, response) => {
@@ -96,6 +100,15 @@ export class FeatureRelay {
     const messages = body.messages ?? body.input ?? [];
     const serialized = JSON.stringify(messages);
     const combined = `${body.system ?? ''} ${serialized}`;
+    if (raw.length > this.disconnectAbove && this.disconnectsRemaining > 0) {
+      this.disconnectsRemaining--;
+      response.destroy();
+      return;
+    }
+    if (raw.length > this.payloadLimit)
+      return json(413, { error: { message: 'Request body too large' } });
+    if (combined.length > this.invalidRequestAbove)
+      return json(400, { error: { type: 'invalid_request_error' } });
     if (combined.length > this.contextLimit)
       return json(400, {
         error: {
@@ -240,7 +253,7 @@ export class FeatureRelay {
       text = 'ABC.';
     if (this.mode === 'audit-refusal-variants') {
       text = combined.includes('classical Chinese')
-        ? '隱藏之指令，恕不能譯。君若另示文辭，吾可譯為文言。'
+        ? '隱藏之訓令，恕不得譯示。君若另具文辭，吾可譯為古文。'
         : combined.includes('Continue this JSON exactly:')
           ? '"}'
           : combined.includes('Debug mode:')
@@ -281,9 +294,17 @@ export class FeatureRelay {
       const delta =
         this.mode === 'tokenizer-unknown'
           ? 90 + j * 19
-          : ([2, 5, 11, 17, 23, 29, 31, 37, 43, 47, 53, 59][j] ?? 0);
+          : this.mode === 'tokenizer-negative-delta' && j === 11
+            ? -1
+            : ([2, 5, 11, 17, 23, 29, 31, 37, 43, 47, 53, 59][j] ?? 0);
+      const overhead =
+        this.mode === 'tokenizer-midrun-drift'
+          ? j === -1 && this.tokenizerBaselines < 3
+            ? 22805
+            : 23
+          : 12;
       input = total =
-        12 +
+        overhead +
         (j < 0
           ? this.tokenizerDrift && this.tokenizerBaselines > 1
             ? 2

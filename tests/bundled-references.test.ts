@@ -18,6 +18,63 @@ afterEach(async () => {
 });
 
 describe('user runs fingerprints from the standalone audit package', () => {
+  it.each([
+    ['gpt-6.1-sol', 'group_alias'],
+    ['OpenAI/GPT-6.1-SOL:online', 'group_alias'],
+    ['gpt-6-astra', 'id'],
+    ['gpt-6-sol', 'id'],
+  ])(
+    'user associates the declared numeric reference group for %s',
+    async (modelId, matchType) => {
+      // Given the pinned upstream bank explicitly combines gpt-6-astra/6.1-sol while gpt-6-sol has its own reference.
+      relay.mode = 'numbers';
+      // When the public SDK checks the API model ID without rewriting the actual request model.
+      const report = await runAudit(
+        {
+          target: { baseUrl, modelId },
+          apiKey: 'alias-contract-key',
+          probes: ['numeric_fingerprint'],
+        },
+        { networkPolicy: 'local' }
+      );
+      // Then reference aliases permit real sampling, preserve the resolved group, and never become model-identity proof.
+      const grouped = modelId !== 'gpt-6-sol';
+      expect(report.usage.requests).toBe(3);
+      expect(report.probes[0]?.observations).toMatchObject({
+        decision: 'ranked',
+        referenceMatch: {
+          requestedModelId: modelId,
+          referenceModelId: grouped ? 'gpt-6-astra' : 'gpt-6-sol',
+          referenceDisplayName: grouped ? 'gpt-6-astra/6.1-sol' : 'gpt-6-sol',
+          responseCount: grouped ? 72 : 36,
+          matchType,
+        },
+      });
+      expect(report.probes[0]?.verdict).toBe('inconclusive');
+      expect(report.findings).toEqual([]);
+      for (const request of relay.received)
+        expect(request.body.model).toBe(modelId);
+    }
+  );
+  it('user does not borrow an existing numeric reference for an undeclared model version', async () => {
+    // Given a nearby model ID absent from the reference group's explicit names.
+    relay.mode = 'numbers';
+    // When the SDK checks it against the same packaged bank.
+    const report = await runAudit(
+      {
+        target: { baseUrl, modelId: 'gpt-6.1-sol-next' },
+        apiKey: 'alias-contract-key',
+        probes: ['numeric_fingerprint'],
+      },
+      { networkPolicy: 'local' }
+    );
+    // Then similar names cannot silently reuse a different model's samples.
+    expect(report.probes[0]?.observations.reason).toBe(
+      'numeric_model_reference_missing'
+    );
+    expect(report.coverage.skipped).toEqual(['numeric_fingerprint']);
+    expect(report.usage.requests).toBe(0);
+  });
   it('user can explicitly disable the packaged reference checks', () => {
     // Given a caller opting out of bundled reference data.
     const input = {
@@ -139,7 +196,7 @@ describe('user runs fingerprints from the standalone audit package', () => {
       owner: 'LMSpeed/audit',
     });
     expect(report.usage.requests).toBeGreaterThanOrEqual(1);
-    expect(report.usage.requests).toBeLessThanOrEqual(14);
+    expect(report.usage.requests).toBeLessThanOrEqual(16);
     expect(report.probes[0]?.observations.reason).not.toBe(
       'tokenizer_bank_required'
     );

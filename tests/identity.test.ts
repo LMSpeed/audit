@@ -133,10 +133,68 @@ describe('user keeps tokenizer evidence separate from model identity', () => {
       class: 'alpha',
       baselineDrift: false,
     });
-    expect(report.usage.requests).toBeLessThanOrEqual(14);
+    expect(report.usage.requests).toBeLessThanOrEqual(15);
   });
-  it('user abstains when the control input count drifts during sampling', async () => {
-    // Given hidden request overhead changing between baseline controls.
+  it.each([
+    {
+      outcome: 'gets a tokenizer result at 94.65% confidence',
+      offset: 1,
+      interval: 3,
+      maximumProbes: 12,
+      expected: {
+        verdict: 'pass',
+        observations: {
+          decision: 'exact',
+          class: 'alpha',
+          confidence: expect.closeTo(0.9465, 4),
+          claim: { status: 'consistent' },
+        },
+      },
+    },
+    {
+      outcome: 'still gets an inconclusive result at 89.85% confidence',
+      offset: 2,
+      interval: 4,
+      maximumProbes: 6,
+      expected: {
+        verdict: 'inconclusive',
+        observations: {
+          decision: 'abstain',
+          reason: 'unknown_or_uncertain_tokenizer',
+          tokenizerVerdict: {
+            kind: 'exact',
+            confidence: expect.closeTo(0.8985, 4),
+            claim: { status: 'consistent' },
+          },
+        },
+      },
+    },
+  ])('user $outcome', async ({ offset, interval, maximumProbes, expected }) => {
+    // Given stable controls and some counts that differ from the declared tokenizer family.
+    const bank = tokenizerFixture();
+    bank.api_models = [];
+    const [alpha] = bank.classes;
+    alpha!.counts = alpha!.counts.map((count, index) =>
+      index % interval === 0 ? count + offset : count
+    );
+    // When the user runs the tokenizer probe through the configured sample budget.
+    const report = await runAudit(
+      {
+        target: { baseUrl, modelId: 'test-model', protocol: 'openai' },
+        apiKey: 'local-test-credential',
+        probes: ['tokenizer_fingerprint'],
+        tokenizer: { bank, maximumProbes },
+      },
+      options
+    );
+    // Then the report requires 90% exact confidence even when the family is consistent.
+    const probe = report.probes[0];
+    expect(probe).toMatchObject(expected);
+    expect(probe?.observations.requiredConfidence).toBe(0.9);
+    expect(probe?.observations.observations).toHaveLength(maximumProbes + 3);
+  });
+  it('user stops before adaptive sampling when identical tokenizer controls disagree', async () => {
+    // Given two different token counts for the same baseline input.
     relay.tokenizerDrift = true;
     // When tokenizer measurements are otherwise consistent.
     const report = await runAudit(
@@ -148,13 +206,67 @@ describe('user keeps tokenizer evidence separate from model identity', () => {
       },
       options
     );
-    // Then drift invalidates the decision instead of merely attaching a warning.
+    // Then the report preserves the two control counts without spending requests on incompatible samples.
     expect(report.probes[0]?.verdict).toBe('inconclusive');
     expect(report.probes[0]?.observations).toMatchObject({
       decision: 'abstain',
       baselineDrift: true,
+      observations: [
+        { probe: null, tokens: 12 },
+        { probe: null, tokens: 14 },
+      ],
     });
+    expect(report.usage.requests).toBe(2);
     expect(report.findings).toEqual([]);
+  });
+  it('user stops sampling when a lower count prompts a control that confirms drift', async () => {
+    // Given matching opening controls and a token-count regime that changes at the first sample.
+    relay.mode = 'tokenizer-midrun-drift';
+    // When the user checks tokenizer compatibility.
+    const report = await runAudit(
+      {
+        target: { baseUrl, modelId: 'test-model', protocol: 'openai' },
+        apiKey: 'local-test-credential',
+        probes: ['tokenizer_fingerprint'],
+        tokenizer: { bank: tokenizerFixture() },
+      },
+      options
+    );
+    // Then the report retains the sample and repeated control without collecting more incompatible counts.
+    expect(report.probes[0]).toMatchObject({
+      verdict: 'inconclusive',
+      observations: {
+        reason: 'baseline_drift',
+        baselineDrift: true,
+        observations: [
+          { probe: null, tokens: 22805 },
+          { probe: null, tokens: 22805 },
+          { probe: expect.any(String) },
+          { probe: null, tokens: 23 },
+        ],
+      },
+    });
+  });
+  it('user receives a tokenizer result when a negative difference has a matching control', async () => {
+    // Given a reference that can use one fewer token for a particular nonempty probe.
+    relay.mode = 'tokenizer-negative-delta';
+    const bank = tokenizerFixture();
+    bank.classes[0]!.counts[11] = -1;
+    // When the user checks a stable endpoint with that tokenizer.
+    const report = await runAudit(
+      {
+        target: { baseUrl, modelId: 'test-model', protocol: 'openai' },
+        apiKey: 'local-test-credential',
+        probes: ['tokenizer_fingerprint'],
+        tokenizer: { bank },
+      },
+      options
+    );
+    // Then the negative difference alone cannot turn stable controls into a drift verdict.
+    expect(report.probes[0]).toMatchObject({
+      verdict: 'pass',
+      observations: { decision: 'exact', class: 'alpha', baselineDrift: false },
+    });
   });
   it('user does not force unlisted tokenizer counts into a known class', async () => {
     // Given a tokenizer unlike either bank class.
@@ -172,6 +284,6 @@ describe('user keeps tokenizer evidence separate from model identity', () => {
     // Then the unknown or uncertain result stays distinct from model identity.
     expect(report.probes[0]?.verdict).toBe('inconclusive');
     expect(report.probes[0]?.observations.decision).not.toBe('exact');
-    expect(report.probes[0]?.observations.requiredConfidence).toBe(0.99);
+    expect(report.probes[0]?.observations.requiredConfidence).toBe(0.9);
   });
 });

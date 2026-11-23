@@ -5,7 +5,8 @@ import { join } from 'node:path';
 // Synthetic upstream artifact tests real offline scoring integration, not model identification accuracy.
 export async function writeNumericFixture(
   directory: string,
-  builtAt = new Date().toISOString()
+  builtAt = new Date().toISOString(),
+  modelIds: readonly [string, string] = ['a', 'b']
 ) {
   const zeros = (n: number) => Array<number>(n).fill(0);
   const params = (sizes: number[]) =>
@@ -21,7 +22,7 @@ export async function writeNumericFixture(
     base_sha256: 'a'.repeat(64),
     source_reference_sha256: 'b'.repeat(64),
     bank_built_at: builtAt,
-    model_ids: ['a', 'b'],
+    model_ids: modelIds,
     response_counts: [8, 8],
     calibration: {
       schema: 'shared-confidence-v2',
@@ -30,7 +31,7 @@ export async function writeNumericFixture(
       binding: {
         base_sha256: 'a'.repeat(64),
         reference_sha256: 'b'.repeat(64),
-        model_ids: ['a', 'b'],
+        model_ids: modelIds,
       },
       calibration_run: 'synthetic-contract',
     },
@@ -64,7 +65,7 @@ export async function writeNumericFixture(
     join(directory, 'unified_bank.json'),
     JSON.stringify({
       built_at: builtAt,
-      models: ['a', 'b'].map((id) => ({
+      models: modelIds.map((id) => ({
         id,
         display_name: id,
         family: id,

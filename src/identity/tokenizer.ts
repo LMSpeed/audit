@@ -10,11 +10,12 @@ import {
   expectedClasses,
   nextProbes,
   probingDone,
-  TOKENIZER_MODEL,
   type TokenizerObservation,
   tokenizerPosterior,
   tokenizerVerdict,
 } from './tokenizer-posterior.js';
+
+const TOKENIZER_MATCH_THRESHOLD = 0.9;
 
 export async function probeTokenizer(
   input: AuditInput,
@@ -78,6 +79,18 @@ export async function probeTokenizer(
       modelId: input.target.modelId,
     });
   const observations: TokenizerObservation[] = [];
+  const baselineCounts = () =>
+    observations
+      .filter((item) => item.probe === null)
+      .map((item) => item.tokens);
+  const measurement = () => ({
+    observations,
+    baselineDrift: new Set(baselineCounts()).size > 1,
+    requiredConfidence: TOKENIZER_MATCH_THRESHOLD,
+    ...(reference ? { reference } : {}),
+    attribution:
+      'Reported tokenizer-count compatibility only; usage may be estimated or modified, and tokenizers are shared across models.',
+  });
   const asked = new Set<string>();
   let failed = false;
   const ask = async (probe: string | null) => {
@@ -95,7 +108,7 @@ export async function probeTokenizer(
       !['answer', 'incomplete'].includes(response.outcome)
     ) {
       failed = true;
-      return;
+      return null;
     }
     observations.push({
       probe,
@@ -103,45 +116,63 @@ export async function probeTokenizer(
       ...(response.model ? { responseModel: response.model } : {}),
     });
     if (probe !== null) asked.add(probe);
+    return response.usage.total;
   };
-  await ask(null);
-  let posterior = tokenizerPosterior(config.bank, observations);
+  const openingBaseline = await ask(null);
+  if (!failed) await ask(null);
+  const preflight = measurement();
+  if (openingBaseline === null || failed || preflight.baselineDrift)
+    return abstain(
+      preflight.baselineDrift ? 'baseline_drift' : 'incomplete_measurement',
+      preflight
+    );
+
+  // Only the opening and closing controls enter the calibrated posterior.
+  const calibratedSamples = () =>
+    observations.filter((item, index) => index === 0 || item.probe !== null);
+  let posterior = tokenizerPosterior(config.bank, calibratedSamples());
   const maximum = config.maximumProbes ?? 20;
+  let recheckedBaseline = false;
   while (!failed && posterior && !probingDone(posterior, maximum)) {
     const next = nextProbes(config.bank, posterior, asked, 1)[0];
     if (!next) break;
-    await ask(next);
-    posterior = tokenizerPosterior(config.bank, observations);
+    const sampleTokens = await ask(next);
+    if (
+      sampleTokens !== null &&
+      sampleTokens < openingBaseline &&
+      !recheckedBaseline
+    ) {
+      recheckedBaseline = true;
+      await ask(null);
+      const recheck = measurement();
+      if (failed || recheck.baselineDrift)
+        return abstain(
+          recheck.baselineDrift ? 'baseline_drift' : 'incomplete_measurement',
+          recheck
+        );
+    }
+    posterior = tokenizerPosterior(config.bank, calibratedSamples());
   }
-  if (!failed) await ask(null);
-  const baselines = observations
-    .filter((item) => item.probe === null)
-    .map((item) => item.tokens);
-  const baselineDrift = new Set(baselines).size > 1;
+  const closingBaseline = failed ? null : await ask(null);
   const models = new Set(
     observations.map((item) => item.responseModel).filter(Boolean)
   );
-  const evidence = {
-    observations,
-    baselineDrift,
-    requiredConfidence: TOKENIZER_MODEL.stopAt,
-    ...(reference ? { reference } : {}),
-    attribution:
-      'Reported tokenizer-count compatibility only; usage may be estimated or modified, and tokenizers are shared across models.',
-  };
+  const evidence = measurement();
   if (
-    failed ||
-    baselines.length !== 2 ||
-    baselineDrift ||
+    closingBaseline === null ||
+    evidence.baselineDrift ||
     models.size > 1 ||
     !posterior ||
     posterior.answered < 4
   )
     return abstain(
-      baselineDrift ? 'baseline_drift' : 'incomplete_measurement',
+      evidence.baselineDrift ? 'baseline_drift' : 'incomplete_measurement',
       evidence
     );
-  posterior = tokenizerPosterior(config.bank, observations)!;
+  posterior = tokenizerPosterior(config.bank, [
+    ...calibratedSamples(),
+    observations.at(-1)!,
+  ])!;
   const verdict = tokenizerVerdict(
     config.bank,
     posterior,
@@ -149,7 +180,7 @@ export async function probeTokenizer(
   );
   if (
     verdict.kind !== 'exact' ||
-    verdict.confidence < TOKENIZER_MODEL.stopAt ||
+    verdict.confidence < TOKENIZER_MATCH_THRESHOLD ||
     verdict.claim?.status === 'uncertain'
   )
     return abstain('unknown_or_uncertain_tokenizer', {

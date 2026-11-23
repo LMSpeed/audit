@@ -7,6 +7,8 @@ export type AuditAssessmentReason =
   | 'requestTimedOut'
   | 'referenceRequired'
   | 'modelReferenceMissing'
+  | 'modelReferenceAmbiguous'
+  | 'numericRankingOnly'
   | 'referenceExpired'
   | 'unparseableResponse'
   | 'incompleteResponse'
@@ -53,6 +55,8 @@ export function getAuditInconclusiveReason(
       ].includes(reason)
     )
       return 'modelReferenceMissing';
+    if (reason === 'numeric_model_reference_ambiguous')
+      return 'modelReferenceAmbiguous';
     if (
       [
         'stale_baseline',
@@ -71,6 +75,11 @@ export function getAuditInconclusiveReason(
   if (observations.outcome === 'safety_refusal') return 'probeRefused';
   if (observations.outcome === 'unexpected_stream') return 'unexpectedStream';
   if (observations.outcome === 'missing_measurement') return 'missingUsage';
+  if (
+    observations.decision === 'ranked' &&
+    observations.scope === 'reference-closed-set'
+  )
+    return 'numericRankingOnly';
   if (observations.outcome === 'error') return 'requestFailed';
   if (
     observations.assessmentReason === 'ambiguous_response' ||
@@ -115,6 +124,14 @@ const assessmentMessages: Record<string, { en: string; zh: string }> = {
     en: 'The reference bank has no usable fingerprint data for this model. The check was skipped without sending model requests.',
     zh: '参考库没有当前模型的可用指纹数据，已跳过检测，未发送模型请求。',
   },
+  modelReferenceAmbiguous: {
+    en: 'The model name matches multiple reference groups. The check was skipped without sending model requests.',
+    zh: '模型名称对应多个参考分组，本项已跳过，未发送模型请求。',
+  },
+  numericRankingOnly: {
+    en: 'Numeric screening completed. It ranks candidates within the reference bank and cannot establish model identity or distinguish models sharing a reference group.',
+    zh: '已完成数字指纹初筛。结果仅对参考库内候选排序，不能独立确认模型身份，也不能区分共享参考分组的型号。',
+  },
   referenceExpired: {
     en: 'The reference baseline has expired; no fresh identity conclusion is issued.',
     zh: '参考基线已过期，本次不据此给出模型身份结论。',
@@ -152,8 +169,8 @@ const assessmentMessages: Record<string, { en: string; zh: string }> = {
     zh: '分词器对照已完成，但匹配、置信度或声明对照未满足全部判定条件，不能据此确认或否定模型身份。',
   },
   tokenizerBaselineDrift: {
-    en: 'The repeated baseline input counts changed during tokenizer sampling; the comparison is not reliable.',
-    zh: '分词器采样前后的相同基线输入计数发生变化，本次对照不可靠。',
+    en: 'Identical empty-text controls reported different input token counts. The samples cannot be compared reliably.',
+    zh: '相同的空文本对照返回了不同的输入 Token 计数，本次样本无法可靠对照。',
   },
   tokenizerIncomplete: {
     en: 'Tokenizer sampling or its controls were incomplete; no reliable comparison was obtained.',
@@ -208,11 +225,92 @@ export function getAuditTokenizerMeasurement(
   };
 }
 
+export function getAuditNumericReferenceMeasurement(
+  observations: Record<string, unknown>
+) {
+  const match = observations.referenceMatch;
+  if (!match || typeof match !== 'object' || Array.isArray(match)) return null;
+  const { referenceDisplayName, responseCount } = match as Record<
+    string,
+    unknown
+  >;
+  if (
+    typeof referenceDisplayName !== 'string' ||
+    !referenceDisplayName.trim() ||
+    typeof responseCount !== 'number' ||
+    !Number.isSafeInteger(responseCount) ||
+    responseCount <= 0
+  )
+    return null;
+  return { group: referenceDisplayName, samples: responseCount };
+}
+
+export function getAuditContextMeasurement(
+  observations: Record<string, unknown>
+) {
+  const positiveInteger = (value: unknown) =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+      ? value
+      : null;
+  const legacy = observations.measurement !== 'endpoint-input-admission';
+  const accepted = positiveInteger(
+    legacy
+      ? observations.largestPassedCharacters
+      : observations.largestAcceptedCharacters
+  );
+  if (legacy && accepted === null) return null;
+  const rejected = legacy
+    ? null
+    : positiveInteger(observations.smallestRejectedCharacters);
+  const upper =
+    rejected !== null && (accepted === null || rejected > accepted)
+      ? rejected
+      : null;
+  const trials = Array.isArray(observations.trials) ? observations.trials : [];
+  const legacyTrial = legacy
+    ? trials.find(
+        (trial) => trial?.size === accepted && trial.recalled === true
+      )
+    : undefined;
+  return {
+    legacy,
+    accepted,
+    rejected: upper,
+    reportedTokens: positiveInteger(
+      legacy
+        ? legacyTrial?.reportedInputTokens
+        : observations.largestAcceptedInputTokens
+    ),
+    reservedOutputTokens: legacy
+      ? null
+      : positiveInteger(observations.reservedOutputTokens),
+    recallLostAt: legacy
+      ? null
+      : positiveInteger(observations.firstRecallFailureCharacters),
+    recallIncomplete: !legacy && observations.recallStatus === 'incomplete',
+    stopReason:
+      legacy || typeof observations.stopReason !== 'string'
+        ? null
+        : observations.stopReason,
+  };
+}
+
 export function getAuditAssessmentMessage(
   observations: Record<string, unknown>,
   locale: 'en' | 'zh',
   inconclusive = true
 ) {
+  const context = getAuditContextMeasurement(observations);
+  if (context?.accepted !== null && context?.accepted !== undefined) {
+    const { accepted, rejected, legacy } = context;
+    if (rejected !== null)
+      return locale === 'zh'
+        ? `接口接受了 ${accepted} 字符，在 ${rejected} 字符处明确拒绝。该区间以字符计。`
+        : `The endpoint accepted ${accepted} characters and explicitly rejected ${rejected} characters. The interval is measured in characters.`;
+    return locale === 'zh'
+      ? `${legacy ? '历史测试成功召回了' : '接口接受了'} ${accepted} 字符。本次仅测得下限。`
+      : `${legacy ? 'The historical test recalled' : 'The endpoint accepted'} ${accepted} characters. This establishes a lower bound only.`;
+  }
   const assessment = observations.assessmentReason;
   const reason =
     typeof assessment === 'string' &&
@@ -221,6 +319,31 @@ export function getAuditAssessmentMessage(
       : inconclusive
         ? getAuditInconclusiveReason(observations)
         : null;
+  if (reason === 'numericRankingOnly') {
+    const ranking = getAuditNumericRankingMeasurement(observations);
+    if (ranking) {
+      const {
+        topCandidate,
+        topProbability,
+        group,
+        claimedRank,
+        claimedProbability,
+        relationship,
+      } = ranking;
+      const topPercent = (topProbability * 100).toFixed(2);
+      const claimedPercent = (claimedProbability * 100).toFixed(2);
+      return locale === 'zh'
+        ? `数字指纹初筛已完成。首位候选 ${topCandidate}（库内闭集概率 ${topPercent}%）；声明模型参考组 ${group} 排第 ${claimedRank}（${claimedPercent}%），${relationship === 'aligned' ? '与首位候选一致' : '与首位候选不同，需复核'}。闭集排序不能独立确认模型身份，也不能据此认定换模。`
+        : `Numeric screening completed. Leading candidate ${topCandidate} (${topPercent}% closed-set probability); declared reference group ${group}: rank ${claimedRank} (${claimedPercent}%). It ${relationship === 'aligned' ? 'aligns with' : 'differs from'} the leading candidate. Closed-set ranking cannot establish model identity or prove model substitution.`;
+    }
+    const measurement = getAuditNumericReferenceMeasurement(observations);
+    if (measurement) {
+      const { group, samples } = measurement;
+      return locale === 'zh'
+        ? `已完成数字指纹初筛，关联参考分组 ${group}（${samples} 条样本）。结果仅是参考库内的闭集排序，不能独立确认模型身份或区分共享分组的型号。`
+        : `Numeric screening completed using reference group ${group} (${samples} samples). Closed-set ranking cannot establish model identity or distinguish models sharing this group.`;
+    }
+  }
   if (reason === 'tokenizerUncertain') {
     const measurement = getAuditTokenizerMeasurement(observations);
     if (measurement) {
@@ -232,4 +355,67 @@ export function getAuditAssessmentMessage(
     }
   }
   return reason ? (assessmentMessages[reason]?.[locale] ?? null) : null;
+}
+
+export function getAuditNumericRankingMeasurement(
+  observations: Record<string, unknown>
+) {
+  if (
+    observations.decision !== 'ranked' ||
+    observations.scope !== 'reference-closed-set'
+  )
+    return null;
+  const reference = getAuditNumericReferenceMeasurement(observations);
+  const match = observations.referenceMatch as
+    | Record<string, unknown>
+    | undefined;
+  if (
+    !reference ||
+    typeof match?.referenceModelId !== 'string' ||
+    !Array.isArray(observations.candidates) ||
+    !observations.candidates.length
+  )
+    return null;
+  const candidates: Array<{
+    model: string;
+    name: string;
+    probability: number;
+  }> = [];
+  for (const value of observations.candidates) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return null;
+    const candidate = value as Record<string, unknown>;
+    if (
+      typeof candidate.model !== 'string' ||
+      !candidate.model.trim() ||
+      typeof candidate.probability !== 'number' ||
+      !Number.isFinite(candidate.probability) ||
+      candidate.probability < 0 ||
+      candidate.probability > 1 ||
+      candidates.some((item) => item.model === candidate.model)
+    )
+      return null;
+    candidates.push({
+      model: candidate.model,
+      name:
+        typeof candidate.display_name === 'string' &&
+        candidate.display_name.trim()
+          ? candidate.display_name
+          : candidate.model,
+      probability: candidate.probability,
+    });
+  }
+  const claimedIndex = candidates.findIndex(
+    (candidate) => candidate.model === match.referenceModelId
+  );
+  if (claimedIndex < 0) return null;
+  return {
+    ...reference,
+    topCandidate: candidates[0]!.name,
+    topProbability: candidates[0]!.probability,
+    claimedRank: claimedIndex + 1,
+    claimedProbability: candidates[claimedIndex]!.probability,
+    relationship:
+      claimedIndex === 0 ? ('aligned' as const) : ('different' as const),
+  };
 }

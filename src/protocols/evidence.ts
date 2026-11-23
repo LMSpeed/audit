@@ -17,6 +17,15 @@ const safeHeaders = new Set([
   'x-request-id',
 ]);
 
+const completionPath = /\/(?:chat\/completions|messages|responses)(?:\?|$)/;
+const transientStatuses = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
+const transientConnectionError =
+  /^(?:socket hang up|client network socket disconnected before secure TLS connection was established|upstream response was aborted|read ECONNRESET|write EPIPE)$/i;
+
+export function isTransientConnectionError(error: string) {
+  return transientConnectionError.test(error);
+}
+
 function excerpt(value: string) {
   return {
     truncated: true,
@@ -85,11 +94,14 @@ function safeUrl(raw: string, scrub: (text: string) => string) {
 
 export function createProbeEvidence(
   fetch: FetchCompletion,
-  scrub: (text: string) => string
+  scrub: (text: string) => string,
+  signal?: AbortSignal,
+  reserveRetry?: () => boolean
 ) {
   const exchanges: Array<Record<string, unknown>> = [];
   let omittedExchanges = 0;
   const recordedFetch: FetchCompletion = async (url, init) => {
+    signal?.throwIfAborted();
     if (exchanges.length >= 64) {
       omittedExchanges++;
       return fetch(url, init);
@@ -106,8 +118,39 @@ export function createProbeEvidence(
     };
     exchanges.push(exchange);
     const started = performance.now();
+    const isCompletion = completionPath.test(String(url));
+    const canRetry = () =>
+      !signal?.aborted &&
+      !init?.signal?.aborted &&
+      isCompletion &&
+      init?.method === 'POST' &&
+      reserveRetry?.() === true;
+    const rememberRetry = (failure: { status: number } | { error: string }) => {
+      exchange.retry = { ...failure, durationMs: performance.now() - started };
+    };
     try {
-      const response = await fetch(url, init);
+      let response: Response;
+      try {
+        response = await fetch(url, init);
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !isTransientConnectionError(error.message) ||
+          !canRetry()
+        )
+          throw error;
+        rememberRetry({ error: scrub(error.message) });
+        response = await fetch(url, init);
+      }
+      if (
+        !exchange.retry &&
+        transientStatuses.has(response.status) &&
+        canRetry()
+      ) {
+        rememberRetry({ status: response.status });
+        await response.body?.cancel();
+        response = await fetch(url, init);
+      }
       const raw = await response.clone().text();
       const contentType = response.headers.get('content-type');
       const protocol = /\/messages(?:\?|$)/.test(String(url))
@@ -115,8 +158,6 @@ export function createProbeEvidence(
         : /\/responses(?:\?|$)/.test(String(url))
           ? 'responses'
           : 'openai';
-      const isCompletion =
-        /\/(?:chat\/completions|messages|responses)(?:\?|$)/.test(String(url));
       const stream =
         contentType?.includes('text/event-stream') ||
         /^(?:\s|:[^\n]*\n)*(?:event:|data:)/.test(raw.slice(0, 2048));

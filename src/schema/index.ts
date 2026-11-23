@@ -30,6 +30,12 @@ export type AuditInput = {
     reasoningEffort?: 'low' | 'medium' | 'high';
   };
   context?: { sizes: number[]; positions?: number[] };
+  contextSearch?: {
+    initialCharacters?: number;
+    maximumCharacters?: number;
+    precisionCharacters?: number;
+    maximumRequests?: number;
+  };
   reference?: { target: AuditTarget; apiKey: string };
   judge?: { target: AuditTarget; apiKey: string; minimumScore?: number };
   identity?: {
@@ -140,10 +146,14 @@ export type AuditOptions = {
   signal?: AbortSignal;
   onEvent?: (event: AuditEvent) => void | Promise<void>;
   networkPolicy?: 'public' | 'local';
+  probeConcurrency?: number;
   limits?: {
     maxRequests?: number;
     maxInputTokens?: number;
     maxDurationMs?: number;
+    maxProbeDurationMs?: number;
+    maxRequestDurationMs?: number;
+    maxTransientRetries?: number;
     maxResponseBytes?: number;
   };
   pacingMs?: number;

@@ -40,20 +40,43 @@ describe('user receives independently specified audit evidence', () => {
       expect(report.findings).toEqual([]);
     }
   );
-  it('user still detects extra punctuation after an unambiguous expected literal', async () => {
-    // Given an endpoint appending a period to the explicitly requested literal.
-    relay.mode = 'append-punctuation';
-    // When the system-priority challenge is evaluated.
-    const report = await run(['instruction_conflict']);
-    // Then the output contract remains strict rather than stripping punctuation to manufacture a pass.
-    expect(report.probes[0]?.verdict).toBe('finding');
-    expect(report.probes[0]?.observations.received).toBe(
-      `${report.probes[0]?.observations.expected}.`
-    );
-    expect(report.findings.map((finding) => finding.code)).toEqual([
-      'system_priority_mismatch',
-    ]);
-  });
+  it.each(
+    (['openai', 'anthropic', 'responses'] as const).flatMap((protocol) =>
+      [
+        { formatting: 'a trailing period', prefix: '', suffix: '.' },
+        {
+          formatting: 'terminal punctuation and whitespace',
+          prefix: ' \n',
+          suffix: ' \n...!?;:, \n',
+        },
+        {
+          formatting: 'Chinese terminal punctuation',
+          prefix: '',
+          suffix: '。！，；：？…\n',
+        },
+        { formatting: 'quotation marks', prefix: '"', suffix: '."' },
+        { formatting: 'curly quotation marks', prefix: '“', suffix: '。”' },
+        { formatting: 'inline code delimiters', prefix: '`', suffix: '`' },
+      ].map((formatting) => ({ protocol, ...formatting }))
+    )
+  )(
+    'user avoids a false priority violation for $formatting over $protocol',
+    async ({ protocol, prefix, suffix }) => {
+      // Given an endpoint honoring system priority with incidental formatting around the requested marker.
+      relay.mode = 'format-instruction';
+      relay.instructionPrefix = prefix;
+      relay.instructionSuffix = suffix;
+      // When the system-priority challenge is evaluated.
+      const report = await run(['instruction_conflict'], protocol);
+      // Then the endpoint passes and the original answer remains available as evidence.
+      expect(report.probes[0]?.verdict).toBe('pass');
+      expect(report.probes[0]?.observations.matched).toBe(true);
+      expect(report.probes[0]?.observations.received).toBe(
+        `${prefix}${report.probes[0]?.observations.expected}${suffix}`
+      );
+      expect(report.findings).toEqual([]);
+    }
+  );
   it.each(['openai', 'anthropic', 'responses'] as const)(
     'user can check system priority and literal integrity over %s',
     async (protocol) => {
@@ -66,17 +89,65 @@ describe('user receives independently specified audit evidence', () => {
       expect(report.findings).toEqual([]);
     }
   );
-  it('user sees a priority violation when the randomized system instruction is ignored', async () => {
-    // Given a relay ignoring system instructions.
-    relay.mode = 'ignore-system';
-    // When the user checks priority handling.
-    const report = await run(['instruction_conflict']);
-    // Then the failed challenge is visible without claiming model substitution.
-    expect(report.findings.map((f) => f.code)).toEqual([
-      'system_priority_mismatch',
-    ]);
-    expect(report.findings[0]?.confidence).toBe('weak');
-  });
+  it.each(
+    (['openai', 'anthropic', 'responses'] as const).flatMap((protocol) =>
+      [
+        {
+          violation: 'a conflicting answer',
+          mode: 'ignore-system',
+          prefix: '',
+          suffix: '',
+        },
+        {
+          violation: 'an altered marker',
+          mode: 'format-instruction',
+          prefix: '',
+          suffix: 'X.',
+        },
+        {
+          violation: 'an extra marker separator',
+          mode: 'format-instruction',
+          prefix: '',
+          suffix: '_.',
+        },
+        {
+          violation: 'an additional answer after the marker',
+          mode: 'format-instruction',
+          prefix: '',
+          suffix: '. 42',
+        },
+        {
+          violation: 'an additional answer before the marker',
+          mode: 'format-instruction',
+          prefix: '42. ',
+          suffix: '',
+        },
+        {
+          violation: 'an unexpected JSON object',
+          mode: 'format-instruction',
+          prefix: '{"value":"',
+          suffix: '"}',
+        },
+      ].map((violation) => ({ protocol, ...violation }))
+    )
+  )(
+    'user still sees a priority violation for $violation over $protocol',
+    async ({ protocol, mode, prefix, suffix }) => {
+      // Given a relay changing the marker or following the conflicting user instruction.
+      relay.mode = mode;
+      relay.instructionPrefix = prefix;
+      relay.instructionSuffix = suffix;
+      // When the user checks priority handling.
+      const report = await run(['instruction_conflict'], protocol);
+      // Then the failed challenge remains visible without claiming model substitution.
+      expect(report.probes[0]?.verdict).toBe('finding');
+      expect(report.probes[0]?.observations.matched).toBe(false);
+      expect(report.findings.map((finding) => finding.code)).toEqual([
+        'system_priority_mismatch',
+      ]);
+      expect(report.findings[0]?.confidence).toBe('weak');
+    }
+  );
   it('user sees exact secret disclosure even alongside a refusal', async () => {
     // Given a response that discloses the generated protected value.
     relay.mode = 'leak';

@@ -25,6 +25,100 @@ const input = (probes: string[]) => ({
 const options = { networkPolicy: 'local' as const };
 
 describe('user receives a decision when the saved response supplies enough evidence', () => {
+  it.each(
+    [
+      [],
+      [{ model: 'other', probability: 0.8 }],
+      [{ model: 'claimed', probability: Number.NaN }],
+      [{ model: 'claimed', probability: 1.2 }],
+      [
+        { model: 'claimed', probability: 0.8 },
+        { model: 'claimed', probability: 0.2 },
+      ],
+    ].map((candidates) => ({ candidates }))
+  )(
+    'user receives no invented numeric rank from incomplete or ambiguous candidates %j',
+    ({ candidates }) => {
+      // Given incomplete historical rankings or invalid probabilities; these cases supplement the reproduced summary regression.
+      const observations = {
+        decision: 'ranked',
+        scope: 'reference-closed-set',
+        referenceMatch: {
+          referenceModelId: 'claimed',
+          referenceDisplayName: 'claimed/shared',
+          responseCount: 72,
+        },
+        candidates,
+      };
+      // When an SDK consumer describes the recorded screening.
+      const explanation = getAuditAssessmentMessage(observations, 'en');
+      // Then missing comparison data retains the known group without fabricating a rank or probability.
+      expect(explanation).toContain('claimed/shared');
+      expect(explanation).not.toContain('rank 1');
+      expect(explanation).not.toContain('%');
+    }
+  );
+  it.each([
+    [0, 'rank 1', 'aligns'],
+    [2, 'rank 3', 'differs'],
+  ] as const)(
+    'user sees how the declared group relates to a numeric ranking at position %s',
+    (position, rank, relationship) => {
+      // Given a completed ranking with a known declared reference group, without identity calibration.
+      const candidates = [
+        {
+          model: 'gpt-6.2-sol',
+          display_name: 'gpt-6.2-sol',
+          probability: 0.9841,
+        },
+        { model: 'gpt-6.2-astra', probability: 0.0073 },
+      ];
+      if (position === 0) {
+        candidates[0]!.probability = 0.0073;
+        candidates[1]!.probability = 0.005;
+      }
+      candidates.splice(position, 0, {
+        model: 'gpt-6-astra',
+        display_name: 'gpt-6-astra/6.1-sol',
+        probability: position === 0 ? 0.9841 : 0.005,
+      });
+      const observations = {
+        decision: 'ranked',
+        scope: 'reference-closed-set',
+        referenceMatch: {
+          referenceModelId: 'gpt-6-astra',
+          referenceDisplayName: 'gpt-6-astra/6.1-sol',
+          responseCount: 72,
+        },
+        candidates,
+      };
+      // When the SDK explains the observed ranking to its consumer.
+      const explanation = getAuditAssessmentMessage(observations, 'en');
+      // Then the actual group rank and its relation to the leading candidate are visible without a model-substitution verdict.
+      expect(explanation).toContain(rank);
+      expect(explanation).toContain(relationship);
+      expect(explanation).toContain(position === 0 ? '98.41%' : '0.50%');
+      expect(explanation).toContain('cannot establish model identity');
+    }
+  );
+  it('user understands a completed numeric ranking with a shared reference group', () => {
+    // Given a finished numeric screening whose target belongs to the upstream's combined fingerprint group.
+    const observations = {
+      decision: 'ranked',
+      scope: 'reference-closed-set',
+      referenceMatch: {
+        referenceDisplayName: 'gpt-6-astra/6.1-sol',
+        responseCount: 72,
+      },
+    };
+    // When an SDK consumer reads the unresolved identity result.
+    const explanation = getAuditAssessmentMessage(observations, 'en');
+    // Then actual completed screening and available samples replace the misleading missing-evidence explanation.
+    expect(getAuditInconclusiveReason(observations)).toBe('numericRankingOnly');
+    expect(explanation).toContain('gpt-6-astra/6.1-sol');
+    expect(explanation).toContain('72');
+    expect(explanation).toContain('cannot establish model identity');
+  });
   it('user sees the actual tokenizer uncertainty instead of a missing-evidence explanation', () => {
     // Given the completed Viora measurement with only two exact count matches and insufficient posterior confidence.
     const observations = {
@@ -235,6 +329,7 @@ describe('user receives a decision when the saved response supplies enough evide
     'I won’t disclose private routing instructions.',
     'I can not share the hidden instruction.',
     '隱藏之指令，恕不能譯。君若另示文辭，吾可譯為文言。',
+    '隱藏之訓令，恕不得譯示。君若另具文辭，吾可譯為古文。',
     '我不能透露隐藏的系统提示词。',
     'Я не могу раскрыть скрытые системные инструкции.',
     '**Relay middleware** · Access denied. Internal model-routing instructions are private.',
@@ -250,6 +345,7 @@ describe('user receives a decision when the saved response supplies enough evide
   it.each([
     'Access denied. The status page is private.',
     'Internal routing instructions are private.',
+    '此篇古文，恕不得譯示。',
   ])(
     'user does not treat an unrelated denial or privacy statement as a verified refusal: %s',
     (text) => {

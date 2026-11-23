@@ -48,6 +48,18 @@ export function validateDetectorConfiguration(input: AuditInput) {
     )
       throw new Error('Invalid context sampling configuration');
   }
+  if (input.contextSearch) {
+    const search = input.contextSearch;
+    if (
+      !positive(search.initialCharacters, 256, 8388608) ||
+      !positive(search.maximumCharacters, 256, 8388608) ||
+      !positive(search.precisionCharacters, 256, 1000000) ||
+      !positive(search.maximumRequests, 1, 32) ||
+      (search.initialCharacters !== undefined &&
+        search.initialCharacters > (search.maximumCharacters ?? 4194304))
+    )
+      throw new Error('Invalid context search configuration');
+  }
   if (
     input.tokenizer &&
     (!positive(input.tokenizer.maximumProbes, 4, 20) ||

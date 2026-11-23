@@ -63,10 +63,18 @@ describe('user retains the original audit capabilities', () => {
   it('user sees a lower bound when the endpoint recalls the entire bounded search', async () => {
     // Given an endpoint retaining every marker up to the resource cap.
     // When the automatic search reaches its maximum test length.
-    const report = await runAudit(input(['context_window']), options);
+    const report = await runAudit(
+      {
+        ...input(['context_window']),
+        contextSearch: { maximumCharacters: 524288 },
+      },
+      options
+    );
     // Then the report distinguishes a lower bound from a measured ceiling.
     expect(report.probes[0]?.observations).toMatchObject({
-      searchComplete: true,
+      searchComplete: false,
+      capacityStatus: 'lower_bound',
+      stopReason: 'character_limit',
       upperBoundObserved: false,
       largestPassedCharacters: 524288,
       smallestFailedCharacters: null,
@@ -88,7 +96,9 @@ describe('user retains the original audit capabilities', () => {
     expect(report.probes[0]?.observations).toMatchObject({
       searchComplete: false,
       upperBoundObserved: false,
-      largestPassedCharacters: 4096,
+      largestAcceptedCharacters: 32768,
+      largestPassedCharacters: 32768,
+      stopReason: 'budget_exhausted',
     });
   });
 
@@ -115,7 +125,11 @@ describe('user retains the original audit capabilities', () => {
     expect(report.findings.map((finding) => finding.code)).toContain(
       'context_recall_missing'
     );
-    expect(report.probes[0]?.observations.upperBoundObserved).toBe(true);
+    expect(report.probes[0]?.observations).toMatchObject({
+      upperBoundObserved: false,
+      smallestRejectedCharacters: null,
+      recallStatus: 'loss_observed',
+    });
   });
 
   it.each([

@@ -17,6 +17,10 @@ afterEach(async () => {
 describe('user rejects invalid detector budgets before any model call', () => {
   it.each([
     { context: { sizes: [0] } },
+    { contextSearch: { initialCharacters: 8192, maximumCharacters: 4096 } },
+    { contextSearch: { maximumCharacters: 8388609 } },
+    { contextSearch: { precisionCharacters: 100 } },
+    { contextSearch: { maximumRequests: 33 } },
     { context: { sizes: [512], positions: [0.9, 0.1] } },
     { generation: { maxOutputTokens: 0 } },
     { generation: { temperature: Number.NaN } },

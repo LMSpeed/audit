@@ -32,6 +32,8 @@ export function authHeaders(input: AuditInput) {
   };
 }
 const marker = () => randomBytes(12).toString('hex');
+const normalizeInstructionReply = (text: string) =>
+  text.replace(/^[\s"'`“”‘’]+|[\s.!?,;:。！？，；：…"'`“”‘’]+$/gu, '');
 async function post(input: AuditInput, fetch: FetchCompletion, body: string) {
   return fetch(endpoint(input), {
     method: 'POST',
@@ -217,9 +219,9 @@ export async function probeBoundary(
       );
     }
     if (id === 'context_window') {
-      const tokens = input.capabilities?.contextWindowTokens;
-      if (!input.context && !tokens) return probeContextBoundary(input, fetch);
-      const sizes = input.context?.sizes ?? [Math.min(16384, tokens! * 2)];
+      if (!input.context || input.contextSearch)
+        return probeContextBoundary(input, fetch);
+      const sizes = input.context.sizes;
       const probe = await probeContextRecall(
         { ...input, context: { ...input.context, sizes } },
         fetch
@@ -238,7 +240,8 @@ export async function probeBoundary(
     if (id === 'latency_variance') {
       const samples: number[] = [];
       for (let i = 0; i < 5; i++) {
-        if (i && options.pacingMs) await delay(options.pacingMs);
+        if (i && options.pacingMs)
+          await delay(options.pacingMs, undefined, { signal: options.signal });
         const start = performance.now();
         const completion = await requestCompletion(input, fetch, {
           prompt: 'Return a short readiness acknowledgement.',
@@ -343,7 +346,7 @@ export async function probeBoundary(
       } else
         mismatch =
           id === 'instruction_conflict'
-            ? response.text.trim() !== expected
+            ? normalizeInstructionReply(response.text) !== expected
             : classifyCommandEcho(
                 expected,
                 normalizeCommandEcho(response.text, expected)

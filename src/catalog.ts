@@ -119,9 +119,9 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     titleZh: '上下文窗口',
     titleEn: 'Context window',
     descriptionZh:
-      '默认自动扩增输入并二分细化可用召回边界；达到资源上限时仅报告下界，显式长度配置仍支持定点抽测。',
+      '自动扩增输入并细化接口接受与拒绝的区间，单独记录标记召回。也支持指定长度抽测。',
     descriptionEn:
-      'Automatically expands inputs and refines usable recall bounds; resource caps yield lower bounds, while explicit sizes retain fixed sampling.',
+      'Automatically expands inputs and refines the interval between endpoint acceptance and rejection. Marker recall is recorded separately. Fixed-size sampling is also available.',
   },
   {
     id: 'tool_substitution',

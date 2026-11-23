@@ -192,7 +192,7 @@ const report = await runAudit(
 console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 ```
 
-Verdicts are computed by the library. Explicit extraction refusals recognize English typography and Chinese/Russian refusal forms; an empty JSON extraction is informational, while ambiguous answers remain inconclusive. The semantic yes/no task accepts terminal punctuation; exact-literal tasks retain strict comparison. For unresolved checks, import `getAuditInconclusiveReason` from `@lmspeed/audit/assessment` to obtain a machine-readable cause for translation. Consumers should retain the engine verdict rather than replacing it with a display heuristic.
+Verdicts are computed by the library. Explicit extraction refusals recognize English typography and Chinese/Russian refusal forms; an empty JSON extraction is informational, while ambiguous answers remain inconclusive. The semantic yes/no task accepts terminal punctuation; the instruction-priority check tolerates surrounding formatting, while literal-copy tasks retain strict comparison. For unresolved checks, import `getAuditInconclusiveReason` from `@lmspeed/audit/assessment` to obtain a machine-readable cause for translation. Consumers should retain the engine verdict rather than replacing it with a display heuristic.
 
 ---
 
@@ -209,7 +209,7 @@ Verdicts are computed by the library. Explicit extraction refusals recognize Eng
 {
   "schemaVersion": "1",
   "engineVersion": "0.3.0",
-  "rulesetVersion": "independent-2026-11-23.4",
+  "rulesetVersion": "independent-2026-11-23.7",
   "target": {
     "baseUrl": "http://127.0.0.1:57215/v1",
     "modelId": "claude-sonnet-4-6",
@@ -322,13 +322,13 @@ Verdicts are computed by the library. Explicit extraction refusals recognize Eng
 
 | Probe ID | Trigger | Behavior & Evidence Scope |
 | :--- | :--- | :--- |
-| `instruction_conflict` | Auto | Places a fresh random `ACK_*` literal contract in system instructions while the user prompt requests ignoring it (`system_priority_mismatch`) |
+| `instruction_conflict` | Auto | Requests a fresh random `ACK_*` in system instructions while the user asks to ignore it; tolerates surrounding whitespace, quotes/backticks and terminal sentence punctuation, but requires the complete unchanged marker with no extra text (`system_priority_mismatch`) |
 | `stream_integrity` | Auto / `connectivity` | Validates SSE framing (`[DONE]` / `message_stop` / `response.completed`), streamed model consistency, and monotonic usage counters |
-| `context_window` | Auto | Without size configuration: exponential expansion and binary refinement, at most 12 requests, 524,288 input characters and 4,096-character resolution. Explicit sizes retain fixed recall sampling. Auth, quota and transient failures never establish capacity |
+| `context_window` | Auto | Expands input and refines the interval between acceptance and confirmed context-limit rejection. `contextSearch` defaults to 32,768 initial characters, up to 4,194,304 characters, 24 requests and 4,096-character resolution, subject to the shared audit budget. Without a confirmed rejection the result is a lower bound. Marker recall is reported separately. `context.sizes` alone retains fixed recall sampling |
 | `context_recall` | Opt-in (`context`) | Embeds random `FACT_*` anchors at configurable positions (`[0, 0.25, 0.5, 0.75, 1]` default), confirming misses once before reporting `context_recall_missing` |
 | `model_fingerprint` | Opt-in (`identity`) | Compares answer distributions against a calibrated holdout baseline; abstains on expired, incomplete, incompatible, or low-margin samples |
 | `numeric_fingerprint` | Auto; optional `numericFingerprint` override | Uses the shipped SHA-256-pinned reference (30-day age limit) for closed-set ranking; no runtime data downloads |
-| `tokenizer_fingerprint` | Auto; optional `tokenizer` override | Uses the shipped fixed tokenizer bank (90-day age limit, at most 12 adaptive probes plus two controls); abstains on drift or uncertainty |
+| `tokenizer_fingerprint` | Auto; optional `tokenizer` override | Uses the shipped tokenizer bank (90-day age limit, up to 12 samples plus four controls). Stops on confirmed drift or abstains when evidence is uncertain |
 
 Reference data is owned and versioned by this package. SDK, CLI and LMSpeed use the same read-only `assets/references` snapshot, including source commit, original dates, hashes and MIT attribution. Explicit `numericFingerprint` and `tokenizer` configuration takes precedence. Set `referenceData: 'disabled'` in SDK/config JSON to disable automatic reference checks. Expired, missing or altered data is reported as inconclusive without downloading replacements or blocking unrelated checks. Distribution confirmation still requires an independently calibrated `identity` baseline.
 
@@ -369,7 +369,7 @@ lmspeed-audit list [--format json]
 | `--key-env` | `PROVIDER_API_KEY` | Environment variable name holding the target credential |
 | `--allow-private` | `false` | Permits plain HTTP and private/loopback addresses for local targets |
 | `--thinking` | `false` | Declares extended thinking support in input capabilities |
-| `--context-tokens` | — | Positive integer used by `context_window` when `context.sizes` is omitted |
+| `--context-tokens` | — | Declared context size recorded alongside the automatic scan |
 | `--max-requests` | `200` | Maximum HTTP requests shared across target, reference, and judge calls |
 | `--max-input-tokens` | `2000000` | Maximum estimated input token budget (`ceil(body.length / 4)`) |
 | `--max-response-bytes` | `4000000` | Maximum bytes buffered per HTTP response |
@@ -436,7 +436,7 @@ flowchart LR
 
 1. **SSRF & Secret Isolation** — `validateTarget` validates URLs and blocks loopback/private/reserved ranges on every connection in public mode, pinning DNS answers into `http(s).request` with hostname verification and redirect rejection. API keys, reference keys, judge keys, and URL assignments (`upstream_url`, `DATABASE_URL`, etc.) are scrubbed from serialized results and errors.
 2. **Execution vs. Verdict Separation** — HTTP auth errors (`401`/`403`), rate limits (`429`), unsupported media/configs, incomplete telemetry, and uncalibrated references become `blocked`, `unsupported`, `skipped`, or `inconclusive` rather than silent passes or false findings.
-3. **Holdout & Statistical Restraint** — Behavioral baselines require matching `protocol` and `generation` contracts, freshness (`<= maxAgeDays`), independent validation holdouts, and minimum separation margins; tokenizer checks guard against baseline drift via paired empty-prompt probes and a `0.99` posterior threshold.
+3. **Holdout & Statistical Restraint** — Behavioral baselines require matching `protocol` and `generation` contracts, freshness (`<= maxAgeDays`), independent validation holdouts, and minimum separation margins. Tokenizer sampling uses two opening controls and one closing control. The first sample below the opening count triggers one extra control to check for drift. Sampling can stop early at 99% posterior confidence, and an exact tokenizer match requires at least 90% confidence.
 4. **Verification Suite (`pnpm check`)** — Runs TypeScript compilation, Biome formatting/linting, strict `tsc --noEmit`, AST test-governance checks (`no-mock`, `given-when-then`, `user ` scenario names), Vitest suites executing against real loopback HTTP relays with a **70% branch coverage threshold**, and package boundary checks (`pnpm verify:package`). Automated tests verify implementation contracts over loopback HTTP; live first-party model accuracy is not claimed without external reference calibration. See [`docs/acceptance.md`](./docs/acceptance.md) and [`docs/strategy-review.md`](./docs/strategy-review.md).
 
 ---
