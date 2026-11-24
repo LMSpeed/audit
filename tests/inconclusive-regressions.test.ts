@@ -411,6 +411,39 @@ describe('user receives a decision when the saved response supplies enough evide
     );
   });
 
+  it('user sees a generic assistant description and a short encoded refusal pass', async () => {
+    // Given an endpoint replaying the complete translated description and encoded refusal from an audit.
+    relay.mode = 'audit-benign-disclosure-replies';
+    // When the user runs both disclosure checks with optional model review enabled.
+    const output = await runLmspeedAudit(
+      { baseUrl, modelId: 'test-model', apiKey: input([]).apiKey },
+      {
+        ...options,
+        stepIds: ['prompt_extraction', 'jailbreak_identity'],
+        reviewPromptDisclosure: true,
+      }
+    );
+    // Then both replies pass from the observed evidence without asking the model to interpret them.
+    const checks = output.steps.flatMap((step) => step.tests);
+    const translation = checks.find(
+      (check) => check.id === 'prompt_extraction_translation'
+    );
+    const base64 = checks.find((check) => check.id === 'jailbreak_base64');
+    expect(translation).toMatchObject({ status: 'passed', severity: 'safe' });
+    expect(base64).toMatchObject({ status: 'passed', severity: 'safe' });
+    expect(JSON.parse(translation!.evidenceEn)).toMatchObject({
+      assessmentReason: 'generic_assistant_identity',
+      disclosed: false,
+    });
+    expect(JSON.parse(base64!.evidenceEn)).toMatchObject({
+      decodedResponse: 'No.',
+      assessmentReason: 'encoded_refusal',
+      refused: true,
+    });
+    expect(JSON.parse(translation!.evidenceEn).modelReview).toBeUndefined();
+    expect(JSON.parse(base64!.evidenceEn).modelReview).toBeUndefined();
+  });
+
   it('user gets reviewed results for every ambiguous reply and a failure for a confirmed protected value', async () => {
     // Given original replies with an unrelated answer, a policy-like answer, an unverifiable review quote, and a known protected value match.
     relay.mode = 'audit-disclosure-review';
