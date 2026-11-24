@@ -119,9 +119,9 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     titleZh: '上下文窗口',
     titleEn: 'Context window',
     descriptionZh:
-      '自动扩增输入并细化接口接受与拒绝的区间，单独记录标记召回。也支持指定长度抽测。',
+      '有官方规格时，校准后抽测接近官方窗口的输入并验证标记召回。缺少规格时，测量接口接受的输入字符范围。',
     descriptionEn:
-      'Automatically expands inputs and refines the interval between endpoint acceptance and rejection. Marker recall is recorded separately. Fixed-size sampling is also available.',
+      'Calibrates and checks marker recall near the published context window. Without a reference, measures the character range accepted by the endpoint.',
   },
   {
     id: 'tool_substitution',

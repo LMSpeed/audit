@@ -9,6 +9,13 @@ export type AuditTarget = {
   modelId: string;
   protocol?: AuditProtocol;
 };
+export type AuditContextReference = {
+  contextWindowTokens: number;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  modelId?: string;
+  sourceUrl?: string;
+};
 export type AuditInput = {
   target: AuditTarget;
   apiKey: string;
@@ -30,6 +37,7 @@ export type AuditInput = {
     reasoningEffort?: 'low' | 'medium' | 'high';
   };
   context?: { sizes: number[]; positions?: number[] };
+  contextReference?: AuditContextReference | null;
   contextSearch?: {
     initialCharacters?: number;
     maximumCharacters?: number;
@@ -144,6 +152,7 @@ export type AuditEvent = {
 };
 export type AuditOptions = {
   signal?: AbortSignal;
+  reviewPromptDisclosure?: boolean;
   onEvent?: (event: AuditEvent) => void | Promise<void>;
   networkPolicy?: 'public' | 'local';
   probeConcurrency?: number;

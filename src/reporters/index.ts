@@ -1,3 +1,7 @@
+import {
+  getAuditAssessmentMessage,
+  getAuditContextVerification,
+} from '../probes/assessment.js';
 import type { AuditReport } from '../schema/index.js';
 export function renderReport(
   report: AuditReport,
@@ -14,7 +18,27 @@ export function renderReport(
     '',
   ];
   for (const probe of report.probes) {
-    lines.push(`- ${probe.id}: ${probe.execution} / ${probe.verdict}`);
+    const context =
+      probe.id === 'context_window'
+        ? getAuditContextVerification(probe.observations)
+        : null;
+    lines.push(
+      `- ${probe.id}: ${probe.execution} / ${context?.verdict ?? probe.verdict}`
+    );
+    if (context) {
+      const summary = getAuditAssessmentMessage(probe.observations, 'en');
+      if (summary) lines.push(`  - ${summary}`);
+      lines.push(`  - Verification reason: ${context.reason}`);
+      if (context.sourceUrl)
+        lines.push(`  - Published source: ${context.sourceUrl}`);
+    }
+    for (const check of probe.checks ?? []) {
+      if (typeof check.observations.disclosureVerdict !== 'string') continue;
+      const summary = getAuditAssessmentMessage(check.observations, 'en');
+      lines.push(
+        `  - ${check.id}: ${check.observations.disclosureVerdict}${summary ? ` — ${summary}` : ''}`
+      );
+    }
     for (const finding of probe.findings)
       lines.push(
         `  - [${finding.severity}; ${finding.confidence}] ${finding.code}: ${finding.evidence.replace(/[\r\n]+/g, ' ')}`

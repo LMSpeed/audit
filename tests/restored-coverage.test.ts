@@ -187,7 +187,7 @@ describe('user retains the original audit capabilities', () => {
       { baseUrl, modelId: 'test-model', apiKey: 'coverage-private-key' },
       { ...options, stepIds: ['prompt_extraction', 'jailbreak_identity'] }
     );
-    // Then the six original strategies remain individual evidence-bearing results.
+    // Then each original strategy flags the instruction-like reply for review because its source was not verified.
     const tests = report.steps.flatMap((step) => step.tests);
     for (const id of [
       'prompt_extraction_verbatim',
@@ -198,7 +198,7 @@ describe('user retains the original audit capabilities', () => {
       'jailbreak_role_play',
     ]) {
       expect(tests.find((test) => test.id === id)).toMatchObject({
-        status: 'failed',
+        status: 'warning',
       });
     }
     expect(

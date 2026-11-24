@@ -298,6 +298,9 @@ export function fromEnvelope(
     }
   } else if (protocol === 'responses') {
     reason = root.status;
+    if (reason === 'incomplete') {
+      reason = object(root.incomplete_details).reason ?? reason;
+    }
     for (const item of array(root.output).map(object)) {
       if (item.type === 'function_call')
         result.calls.push({
@@ -312,7 +315,7 @@ export function fromEnvelope(
           result.text += block.text;
       }
     }
-    if (reason !== 'completed') result.outcome = 'incomplete';
+    if (root.status !== 'completed') result.outcome = 'incomplete';
   } else {
     const choice = object(array(root.choices)[0]);
     const message = object(choice.message);
@@ -342,7 +345,11 @@ export function fromEnvelope(
     result.outcome = 'safety_refusal';
   else if (['max_tokens', 'length'].includes(String(reason)))
     result.outcome = 'incomplete';
-  else if (!result.text.trim() && !result.calls.length)
+  else if (
+    !result.text.trim() &&
+    !result.calls.length &&
+    !(protocol === 'responses' && root.status === 'incomplete')
+  )
     result.outcome = 'unparseable';
   if (typeof reason === 'string') result.reason = reason;
   return result;

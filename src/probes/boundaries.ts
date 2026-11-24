@@ -219,7 +219,13 @@ export async function probeBoundary(
       );
     }
     if (id === 'context_window') {
-      if (!input.context || input.contextSearch)
+      if (
+        !input.context ||
+        input.contextSearch ||
+        input.contextReference != null ||
+        (input.contextReference === undefined &&
+          input.capabilities?.contextWindowTokens !== undefined)
+      )
         return probeContextBoundary(input, fetch);
       const sizes = input.context.sizes;
       const probe = await probeContextRecall(
@@ -229,9 +235,14 @@ export async function probeBoundary(
       return {
         ...probe,
         id,
+        verdict: probe.verdict === 'pass' ? 'inconclusive' : probe.verdict,
         findings: probe.findings.map((f) => ({ ...f, probeId: id })),
         observations: {
           ...probe.observations,
+          contextVerification: {
+            verdict: 'fail',
+            reason: 'reference_missing',
+          },
           scope:
             'Bounded recall sample; not measured context capacity or relay truncation attribution',
         },
@@ -307,7 +318,12 @@ export async function probeBoundary(
       );
     }
     if (id === 'prompt_extraction' || id === 'jailbreak_identity')
-      return probePromptSecurity(id, input, fetch);
+      return probePromptSecurity(
+        id,
+        input,
+        fetch,
+        options.reviewPromptDisclosure
+      );
     if (
       id === 'instruction_conflict' ||
       id === 'tool_substitution' ||

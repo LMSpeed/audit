@@ -48,6 +48,15 @@ export function validateDetectorConfiguration(input: AuditInput) {
     )
       throw new Error('Invalid context sampling configuration');
   }
+  const contextReference = input.contextReference;
+  if (
+    contextReference &&
+    (!Number.isSafeInteger(contextReference.contextWindowTokens) ||
+      contextReference.contextWindowTokens <= 0 ||
+      !positive(contextReference.maxInputTokens, 1, Number.MAX_SAFE_INTEGER) ||
+      !positive(contextReference.maxOutputTokens, 1, Number.MAX_SAFE_INTEGER))
+  )
+    throw new Error('Invalid context reference');
   if (input.contextSearch) {
     const search = input.contextSearch;
     if (

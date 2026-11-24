@@ -69,14 +69,47 @@ export async function probeContextBoundary(
 ) {
   const started = performance.now();
   const id = 'context_window';
+  const reference = input.contextReference;
+  const declaredTokens =
+    reference?.contextWindowTokens ??
+    (reference === null ? undefined : input.capabilities?.contextWindowTokens);
+  const reservedOutputTokens =
+    input.generation?.maxOutputTokens ??
+    Math.min(
+      1024,
+      reference?.maxOutputTokens ?? 1024,
+      declaredTokens === undefined
+        ? 1024
+        : Math.max(1, Math.floor(declaredTokens / 4))
+    );
+  const targetInputTokens =
+    declaredTokens === undefined
+      ? null
+      : Math.min(
+          reference?.maxInputTokens ?? declaredTokens,
+          Math.max(1, declaredTokens - reservedOutputTokens)
+        );
+  const minimumInputTokens =
+    targetInputTokens === null
+      ? null
+      : targetInputTokens - Math.min(4096, Math.floor(targetInputTokens / 100));
   const maximum = input.contextSearch?.maximumCharacters ?? 4194304;
   const precision = input.contextSearch?.precisionCharacters ?? 4096;
-  const maximumRequests = input.contextSearch?.maximumRequests ?? 24;
-  const reservedOutputTokens = input.generation?.maxOutputTokens ?? 1024;
-  let size = Math.min(maximum, input.contextSearch?.initialCharacters ?? 32768);
+  const maximumRequests =
+    input.contextSearch?.maximumRequests ??
+    (targetInputTokens === null ? 24 : 5);
+  const calibrationSize =
+    targetInputTokens === null
+      ? 32768
+      : Math.max(256, Math.min(32768, Math.floor(targetInputTokens / 8)));
+  let size = Math.min(
+    maximum,
+    input.contextSearch?.initialCharacters ?? calibrationSize
+  );
   let largestAcceptedCharacters = 0;
   let largestPassedCharacters = 0;
   let largestAcceptedInputTokens: number | null = null;
+  let largestRecalledInputTokens: number | null = null;
   let smallestRejectedCharacters: number | null = null;
   let ambiguousFailure: { size: number; response: Completion } | undefined;
   let firstRecallFailureCharacters: number | null = null;
@@ -95,8 +128,15 @@ export async function probeContextBoundary(
       largestAcceptedCharacters = length;
       largestAcceptedInputTokens = response.usage.total;
     }
-    if (recalled)
+    if (recalled) {
       largestPassedCharacters = Math.max(largestPassedCharacters, length);
+      if (response.usage.total !== null) {
+        largestRecalledInputTokens = Math.max(
+          largestRecalledInputTokens ?? 0,
+          response.usage.total
+        );
+      }
+    }
   };
   while (trials.length < maximumRequests) {
     const { facts, prompt } = challenge(size);
@@ -122,6 +162,7 @@ export async function probeContextBoundary(
         size: prompt.length,
         phase,
         inputBytes: Buffer.byteLength(prompt),
+        maxOutputTokens: reservedOutputTokens,
         expectedMarkers: facts,
         expected: {
           requiredMarkers: facts,
@@ -149,11 +190,31 @@ export async function probeContextBoundary(
       }
       return observed;
     };
-    const observed = await attempt(
-      smallestRejectedCharacters === null && !ambiguousFailure
-        ? 'expansion'
-        : 'refinement'
-    );
+    const phase =
+      targetInputTokens !== null
+        ? trials.length === 0
+          ? 'calibration'
+          : 'target_verification'
+        : smallestRejectedCharacters === null && !ambiguousFailure
+          ? 'expansion'
+          : 'refinement';
+    const observed = await attempt(phase);
+    const reported = observed.response.usage.total;
+    // The generated prompt is ASCII. Allow for message framing by the endpoint.
+    const maximumPlausibleTokens = prompt.length + 256;
+    if (
+      targetInputTokens !== null &&
+      reported !== null &&
+      reported > maximumPlausibleTokens
+    ) {
+      stopReason = 'token_usage_inconsistent';
+      break;
+    }
+    const firstRejection = smallestRejectedCharacters === null;
+    const atTarget =
+      minimumInputTokens !== null &&
+      reported !== null &&
+      reported >= minimumInputTokens;
     if (observed.rejected) {
       if (trials.length >= maximumRequests) break;
       const confirmation = await attempt('rejection_confirmation');
@@ -168,10 +229,14 @@ export async function probeContextBoundary(
         prompt.length
       );
     } else if (observed.accepted) {
+      if (atTarget && observed.recalled) {
+        stopReason = 'target_verified';
+        break;
+      }
       if (observed.recalled === null) recallIncomplete = true;
       if (
         observed.recalled === false &&
-        !recallChecked &&
+        (targetInputTokens === null ? !recallChecked : atTarget) &&
         trials.length < maximumRequests
       ) {
         recallChecked = true;
@@ -185,6 +250,27 @@ export async function probeContextBoundary(
             : termination(confirmation.response);
           break;
         }
+        const confirmedTokens = confirmation.response.usage.total;
+        if (
+          minimumInputTokens !== null &&
+          confirmedTokens !== null &&
+          confirmedTokens <= maximumPlausibleTokens &&
+          confirmedTokens >= minimumInputTokens &&
+          confirmation.recalled !== null
+        ) {
+          stopReason = confirmation.recalled
+            ? 'target_verified'
+            : 'target_recall_failed';
+          break;
+        }
+      }
+      if (targetInputTokens !== null && (reported === null || reported <= 0)) {
+        stopReason = 'token_usage_missing';
+        break;
+      }
+      if (atTarget) {
+        stopReason = 'target_recall_incomplete';
+        break;
       }
     } else if (
       largestAcceptedCharacters > 0 &&
@@ -201,6 +287,7 @@ export async function probeContextBoundary(
       break;
     }
     if (
+      targetInputTokens === null &&
       smallestRejectedCharacters !== null &&
       largestAcceptedCharacters > 0 &&
       smallestRejectedCharacters - largestAcceptedCharacters <= precision
@@ -212,6 +299,23 @@ export async function probeContextBoundary(
       smallestRejectedCharacters ?? Number.POSITIVE_INFINITY,
       ambiguousFailure?.size ?? Number.POSITIVE_INFINITY
     );
+    if (targetInputTokens !== null && minimumInputTokens !== null) {
+      const aim = (targetInputTokens + minimumInputTokens) / 2;
+      const projected =
+        observed.accepted && reported !== null && reported > 0
+          ? Math.ceil((prompt.length * aim) / reported)
+          : observed.rejected && firstRejection && largestAcceptedCharacters > 0
+            ? Math.floor((prompt.length * minimumInputTokens) / aim)
+            : Math.floor((largestAcceptedCharacters + searchCeiling) / 2);
+      const upper = Math.min(maximum, searchCeiling - 1);
+      const next = Math.max(256, Math.min(projected, upper));
+      if (next <= largestAcceptedCharacters || next === size || next > upper) {
+        stopReason = 'target_not_reached';
+        break;
+      }
+      size = next;
+      continue;
+    }
     if (Number.isFinite(searchCeiling)) {
       if (
         ambiguousFailure &&
@@ -235,7 +339,22 @@ export async function probeContextBoundary(
       size = Math.min(maximum, size * 2);
     }
   }
+  const verifiedTarget = stopReason === 'target_verified';
   const searchComplete = stopReason === 'boundary_located';
+  const verificationReason = verifiedTarget
+    ? 'target_recalled'
+    : targetInputTokens === null
+      ? 'reference_missing'
+      : stopReason === 'target_recall_failed'
+        ? 'recall_missing'
+        : stopReason === 'token_usage_missing' ||
+            stopReason === 'token_usage_inconsistent'
+          ? stopReason
+          : stopReason === 'target_recall_incomplete'
+            ? 'recall_incomplete'
+            : smallestRejectedCharacters !== null
+              ? 'context_rejected'
+              : 'target_not_reached';
   return result(
     id,
     started,
@@ -253,6 +372,7 @@ export async function probeContextBoundary(
       largestPassedCharacters,
       smallestFailedCharacters: smallestRejectedCharacters,
       firstRecallFailureCharacters,
+      largestRecalledInputTokens,
       recallStatus:
         firstRecallFailureCharacters !== null
           ? 'loss_observed'
@@ -260,7 +380,15 @@ export async function probeContextBoundary(
             ? 'incomplete'
             : 'passed_at_tested_sizes',
       reservedOutputTokens,
-      declaredContextWindowTokens: input.capabilities?.contextWindowTokens,
+      declaredContextWindowTokens: declaredTokens,
+      contextVerification: {
+        verdict: verifiedTarget ? 'pass' : 'fail',
+        reason: verificationReason,
+        targetInputTokens,
+        minimumInputTokens,
+        modelId: reference?.modelId,
+        sourceUrl: reference?.sourceUrl,
+      },
       searchComplete,
       upperBoundObserved: smallestRejectedCharacters !== null,
       stopReason,
@@ -271,7 +399,9 @@ export async function probeContextBoundary(
       reason: lastResponse?.reason,
       trials,
       scope:
-        'Endpoint input-admission interval in characters with a reserved output budget. Reported input tokens are unverified endpoint usage. Recall performance is recorded separately; no native model token capacity or relay truncation is inferred.',
+        targetInputTokens === null
+          ? 'Endpoint input-admission interval in characters with a reserved output budget. Reported input tokens are unverified endpoint usage. Recall performance is recorded separately; no native model token capacity or relay truncation is inferred.'
+          : 'Endpoint context verification against the supplied token limit. Input token counts come from the endpoint. Passing requires complete marker recall at the required input size.',
     },
     firstRecallFailureCharacters !== null
       ? [
@@ -284,6 +414,6 @@ export async function probeContextBoundary(
         ]
       : [],
     'completed',
-    !searchComplete || largestAcceptedCharacters === 0
+    !verifiedTarget
   );
 }

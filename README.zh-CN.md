@@ -324,7 +324,7 @@ console.log(ENGINE_VERSION, report.assessment.verdict, report.coverage);
 | :--- | :--- | :--- |
 | `instruction_conflict` | 自动 | 系统消息要求返回随机 `ACK_*`，用户消息要求忽略前文计算乘法；容忍首尾空白、外层引号/反引号和末尾句末标点，随机标记仍须完整一致且无额外正文（`system_priority_mismatch`） |
 | `stream_integrity` | 自动 / `connectivity` | 校验 SSE 事件结构、终结符（`[DONE]` / `message_stop` / `response.completed`）、流式模型名一致与用量单调递增 |
-| `context_window` | 自动 | 逐步扩增输入并细化接口接受与明确超限拒绝之间的区间。`contextSearch` 默认从 32,768 字符起测，最多 4,194,304 字符、24 次请求，精度 4,096 字符，并受共享审计预算限制。未确认拒绝时只报告下限。标记召回单独报告。仅设置 `context.sizes` 时保留定点召回抽测 |
+| `context_window` | 自动 | 有官方规格时，先用短样本校准，再直接抽测接近官方窗口的输入，默认最多五次请求。完整召回标记且接口上报的输入 Token 达标即通过。缺少规格时继续测量字符区间，并标记未通过官方验证。仅设置 `context.sizes` 时保留定点召回抽测 |
 | `context_recall` | 可选（`context`） | 在默认 `[0, 0.25, 0.5, 0.75, 1]` 等位置埋入随机 `FACT_*` 标记并在漏检时复核一次，确认 `context_recall_missing` |
 | `model_fingerprint` | 可选（`identity`） | 与经过验证的留出基线比对输出分布；样本不足、过期、配置不兼容或间隔不够时拒判 |
 | `numeric_fingerprint` | 自动；支持 `numericFingerprint` 覆盖 | 使用随包、SHA-256 固定的参考数据进行封闭集排序，有效期 30 天；运行时不下载数据 |
@@ -369,7 +369,7 @@ lmspeed-audit list [--format json]
 | `--key-env` | `PROVIDER_API_KEY` | 读取目标 API 密钥的环境变量名 |
 | `--allow-private` | `false` | 允许访问纯 HTTP 及内网/回环调试地址 |
 | `--thinking` | `false` | 在能力描述中声明支持扩展思考 |
-| `--context-tokens` | — | 声明的上下文长度（正整数），随自动扫描记录 |
+| `--context-tokens` | — | 官方上下文窗口（Token 正整数），启用定向验收 |
 | `--max-requests` | `200` | 目标、参照及裁判请求共享的总请求数上限 |
 | `--max-input-tokens` | `2000000` | 预估总输入 Token 上限（按 `ceil(body.length / 4)` 累计） |
 | `--max-response-bytes` | `4000000` | 单次 HTTP 响应体最大缓存字节数 |

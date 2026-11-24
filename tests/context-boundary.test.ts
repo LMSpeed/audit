@@ -149,6 +149,10 @@ describe('user measures context admission separately from long-input recall', ()
     expect(Number(observed.largestAcceptedCharacters)).toBeGreaterThan(524288);
     expect(observed.upperBoundObserved).toBe(false);
     expect(observed.searchComplete).toBe(false);
+    expect(observed.contextVerification).toMatchObject({
+      verdict: 'fail',
+      reason: 'reference_missing',
+    });
     expect(report.probes[0]!.verdict).toBe('inconclusive');
   });
   it('user can still measure input admission when the model loses recall markers', async () => {
@@ -169,17 +173,177 @@ describe('user measures context admission separately from long-input recall', ()
       'context_recall_missing'
     );
   });
-  it('user gets an automatic search even after providing a declared token window', async () => {
-    // Given a declared token window and an endpoint whose real admission boundary is above 16384 characters.
-    relay.contextLimit = 100000;
+  it('user verifies the advertised context with a short calibration and a targeted sample', async () => {
+    // Given a 100,000-token model and an endpoint enforcing that same shared context budget.
+    relay.contextTokensPerCharacter = 0.65;
+    relay.contextTokenLimit = 100000;
     const target = input();
-    target.capabilities = { contextWindowTokens: 1000000 };
-    // When context-window detection runs with that hint.
+    target.capabilities = { contextWindowTokens: 100000 };
+    // When the user audits the endpoint against the advertised specification.
     const report = await runAudit(target, options);
-    const observed = report.probes[0]!.observations;
-    // Then the hint does not downgrade measurement to a tiny fixed recall sample.
-    expect(Number(observed.largestAcceptedCharacters)).toBeGreaterThan(16384);
-    expect(observed.smallestRejectedCharacters).toBeGreaterThan(100000);
-    expect(observed.upperBoundObserved).toBe(true);
+    // Then a few requests verify the near-limit input and the response recalls all markers.
+    expect(report.probes[0]).toMatchObject({
+      verdict: 'pass',
+      observations: {
+        reservedOutputTokens: 1024,
+        contextVerification: {
+          verdict: 'pass',
+          targetInputTokens: 98976,
+          reason: 'target_recalled',
+        },
+      },
+    });
+    expect(report.usage.requests).toBeLessThanOrEqual(3);
+  });
+
+  it.each(['openai', 'anthropic', 'responses'] as const)(
+    'user can verify context without an extra request when the %s endpoint uses output tokens to reason',
+    async (protocol) => {
+      // Given a shared 32K window whose long requests use part of the output budget to reason.
+      relay.contextTokensPerCharacter = 0.65;
+      relay.contextTokenLimit = 32000;
+      relay.contextRecallOutputTokens = 600;
+      relay.contextRecallOutputRequiredAbove = 20000;
+      const auditInput = {
+        ...input(),
+        target: { ...input().target, protocol },
+        capabilities: { contextWindowTokens: 32000 },
+      };
+      // When the user verifies the advertised context.
+      const report = await runAudit(auditInput, options);
+      // Then both samples allow enough room for recall and the probe finishes after two requests.
+      expect(report.probes[0]!.observations).toMatchObject({
+        reservedOutputTokens: 1024,
+        contextVerification: { verdict: 'pass', targetInputTokens: 30976 },
+        trials: [
+          expect.objectContaining({ recalled: true, maxOutputTokens: 1024 }),
+          expect.objectContaining({ recalled: true, maxOutputTokens: 1024 }),
+        ],
+      });
+      expect(report.usage.requests).toBe(2);
+    }
+  );
+
+  it('user sees a failed verification when a smaller endpoint rejects the advertised target', async () => {
+    // Given an endpoint capped at 80,000 tokens for a model advertised at 100,000 tokens.
+    relay.contextTokensPerCharacter = 0.65;
+    relay.contextTokenLimit = 80000;
+    const target = {
+      ...input(),
+      capabilities: { contextWindowTokens: 100000 },
+    };
+    // When the user checks the advertised context.
+    const report = await runAudit(target, options);
+    // Then the endpoint cannot pass on shorter successful samples and the evidence keeps the rejection.
+    expect(report.probes[0]!.observations).toMatchObject({
+      contextVerification: { verdict: 'fail', targetInputTokens: 98976 },
+      trials: expect.arrayContaining([
+        expect.objectContaining({ status: 400, rejected: true }),
+      ]),
+    });
+    expect(report.usage.requests).toBeLessThanOrEqual(5);
+  });
+
+  it('user can pass when the first targeted request slightly overshoots the published limit', async () => {
+    // Given a matching endpoint where the long sample has denser tokenization than the calibration sample.
+    relay.contextTokensPerCharacter = 0.65;
+    relay.longContextTokenDensity = {
+      above: 100000,
+      tokensPerCharacter: 0.655,
+    };
+    relay.contextTokenLimit = 100000;
+    const target = {
+      ...input(),
+      capabilities: { contextWindowTokens: 100000 },
+    };
+    // When an otherwise valid check encounters a slightly oversized input.
+    const report = await runAudit(target, options);
+    // Then a nearby sample verifies the advertised window within the same request budget.
+    expect(report.probes[0]!.observations.contextVerification).toMatchObject({
+      verdict: 'pass',
+      reason: 'target_recalled',
+    });
+    expect(report.usage.requests).toBeLessThanOrEqual(5);
+  });
+
+  it('user verifies a published input cap without exceeding the official output cap', async () => {
+    // Given a publisher that specifies separate input and output caps.
+    relay.contextTokensPerCharacter = 0.65;
+    relay.contextTokenLimit = 90400;
+    const reportInput = {
+      ...input(),
+      contextReference: {
+        modelId: 'test-model',
+        contextWindowTokens: 100000,
+        maxInputTokens: 90000,
+        maxOutputTokens: 200,
+        sourceUrl: 'https://publisher.example/model',
+      },
+    };
+    // When the user verifies that model at the endpoint.
+    const report = await runAudit(reportInput, options);
+    // Then the probe verifies the published input cap and preserves the source and output budget.
+    expect(report.probes[0]!.observations).toMatchObject({
+      declaredContextWindowTokens: 100000,
+      reservedOutputTokens: 200,
+      contextVerification: {
+        verdict: 'pass',
+        targetInputTokens: 90000,
+        sourceUrl: 'https://publisher.example/model',
+      },
+    });
+  });
+
+  it('user sees a failed verification when an accepted near-limit sample loses markers', async () => {
+    // Given a correctly sized endpoint that consistently loses an early marker on long requests.
+    relay.contextTokensPerCharacter = 0.65;
+    relay.contextTokenLimit = 100000;
+    relay.recallLimit = 100000;
+    const target = {
+      ...input(),
+      capabilities: { contextWindowTokens: 100000 },
+    };
+    // When the endpoint accepts the targeted sample.
+    const report = await runAudit(target, options);
+    // Then accepting enough input by itself does not verify usable context.
+    expect(report.probes[0]).toMatchObject({
+      verdict: 'finding',
+      observations: {
+        contextVerification: { verdict: 'fail', reason: 'recall_missing' },
+        recallStatus: 'loss_observed',
+      },
+    });
+  });
+
+  it('user cannot verify a target when token accounting does not grow with the request', async () => {
+    // Given an endpoint that reports a low fixed token count for all input lengths.
+    const target = {
+      ...input(),
+      capabilities: { contextWindowTokens: 100000 },
+    };
+    // When the user checks the advertised capacity.
+    const report = await runAudit(target, options);
+    // Then the check explicitly fails verification while keeping the accepted input evidence.
+    expect(report.probes[0]!.observations).toMatchObject({
+      contextVerification: { verdict: 'fail', reason: 'target_not_reached' },
+      largestAcceptedInputTokens: 12,
+    });
+    expect(report.usage.requests).toBeLessThanOrEqual(5);
+  });
+
+  it('user cannot pass on a calibration sample with an inflated token count', async () => {
+    // Given an endpoint whose short ASCII request reports several input tokens per character.
+    relay.contextTokensPerCharacter = 10;
+    const target = {
+      ...input(),
+      capabilities: { contextWindowTokens: 100000 },
+    };
+    // When the user checks the advertised capacity.
+    const report = await runAudit(target, options);
+    // Then the short sample cannot masquerade as a near-limit sample.
+    expect(report.probes[0]!.observations.contextVerification).toMatchObject({
+      verdict: 'fail',
+      reason: 'token_usage_inconsistent',
+    });
   });
 });

@@ -38,6 +38,7 @@ export async function loadAuditConfiguration(
     'capabilities',
     'generation',
     'context',
+    'contextReference',
     'contextSearch',
     'reference',
     'judge',

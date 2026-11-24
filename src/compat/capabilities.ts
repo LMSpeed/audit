@@ -12,29 +12,40 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
   if (!definition) throw new Error(`Missing probe definition: ${probe.id}`);
   const severity =
     probe.verdict === 'finding'
-      ? 'warning'
+      ? probe.findings.some((finding) => finding.severity === 'critical')
+        ? 'critical'
+        : 'warning'
       : probe.verdict === 'inconclusive'
         ? 'unknown'
         : 'safe';
-  const explanation =
-    probe.verdict === 'finding'
+  const contextSummary =
+    probe.id === 'context_window'
       ? {
-          zh: '发现契约差异，请结合证据复核。',
-          en: 'Observed a contract difference; review the evidence.',
+          zh: getAuditAssessmentMessage(probe.observations, 'zh'),
+          en: getAuditAssessmentMessage(probe.observations, 'en'),
         }
-      : probe.verdict === 'inconclusive'
+      : null;
+  const explanation =
+    contextSummary?.zh && contextSummary.en
+      ? { zh: contextSummary.zh, en: contextSummary.en }
+      : probe.verdict === 'finding'
         ? {
-            zh:
-              getAuditAssessmentMessage(probe.observations, 'zh') ??
-              '没有足够证据完成此检测。',
-            en:
-              getAuditAssessmentMessage(probe.observations, 'en') ??
-              'Insufficient evidence to complete this check.',
+            zh: '发现契约差异，请结合证据复核。',
+            en: 'Observed a contract difference; review the evidence.',
           }
-        : {
-            zh: '本次请求满足所测契约。',
-            en: 'This run satisfied the tested contract.',
-          };
+        : probe.verdict === 'inconclusive'
+          ? {
+              zh:
+                getAuditAssessmentMessage(probe.observations, 'zh') ??
+                '没有足够证据完成此检测。',
+              en:
+                getAuditAssessmentMessage(probe.observations, 'en') ??
+                'Insufficient evidence to complete this check.',
+            }
+          : {
+              zh: '本次请求满足所测契约。',
+              en: 'This run satisfied the tested contract.',
+            };
   const tests = ['unsupported', 'skipped'].includes(probe.execution)
     ? []
     : probe.findings.length
@@ -71,13 +82,17 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
             check.execution === 'blocked' || check.execution === 'error'
               ? ('blocked' as const)
               : check.verdict === 'finding'
-                ? ('failed' as const)
+                ? check.observations.disclosureVerdict === 'review'
+                  ? ('warning' as const)
+                  : ('failed' as const)
                 : check.verdict === 'pass'
                   ? ('passed' as const)
                   : ('inconclusive' as const),
           severity:
             check.verdict === 'finding'
-              ? ('warning' as const)
+              ? check.observations.disclosureVerdict === 'fail'
+                ? ('critical' as const)
+                : ('warning' as const)
               : check.verdict === 'inconclusive'
                 ? ('unknown' as const)
                 : check.informational
@@ -85,7 +100,8 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
                   : ('safe' as const),
           resultZh:
             check.verdict === 'finding'
-              ? '发现泄漏线索，请复核证据。'
+              ? (getAuditAssessmentMessage(check.observations, 'zh', false) ??
+                '发现泄漏线索，请复核证据。')
               : check.verdict === 'inconclusive'
                 ? (getAuditAssessmentMessage(
                     check.observations,
@@ -98,7 +114,8 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
                     : '本次挑战未观察到泄漏。')),
           resultEn:
             check.verdict === 'finding'
-              ? 'Disclosure signal observed; review the evidence.'
+              ? (getAuditAssessmentMessage(check.observations, 'en', false) ??
+                'Disclosure signal observed; review the evidence.')
               : check.verdict === 'inconclusive'
                 ? (getAuditAssessmentMessage(
                     check.observations,
@@ -153,7 +170,10 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
                     ? check.observations.reportedInputTokens
                     : null
                 ),
-                verdict: check.verdict,
+                verdict:
+                  typeof check.observations.disclosureVerdict === 'string'
+                    ? check.observations.disclosureVerdict
+                    : check.verdict,
               })),
             },
           ]

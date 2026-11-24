@@ -324,7 +324,7 @@ Verdicts are computed by the library. Explicit extraction refusals recognize Eng
 | :--- | :--- | :--- |
 | `instruction_conflict` | Auto | Requests a fresh random `ACK_*` in system instructions while the user asks to ignore it; tolerates surrounding whitespace, quotes/backticks and terminal sentence punctuation, but requires the complete unchanged marker with no extra text (`system_priority_mismatch`) |
 | `stream_integrity` | Auto / `connectivity` | Validates SSE framing (`[DONE]` / `message_stop` / `response.completed`), streamed model consistency, and monotonic usage counters |
-| `context_window` | Auto | Expands input and refines the interval between acceptance and confirmed context-limit rejection. `contextSearch` defaults to 32,768 initial characters, up to 4,194,304 characters, 24 requests and 4,096-character resolution, subject to the shared audit budget. Without a confirmed rejection the result is a lower bound. Marker recall is reported separately. `context.sizes` alone retains fixed recall sampling |
+| `context_window` | Auto | Uses a short calibration sample and targets the supplied context in up to five requests by default. Pass requires full marker recall and sufficient endpoint-reported input usage. Without a reference, measures character bounds and reports that official verification did not pass. Explicit `context.sizes` alone retains fixed recall sampling |
 | `context_recall` | Opt-in (`context`) | Embeds random `FACT_*` anchors at configurable positions (`[0, 0.25, 0.5, 0.75, 1]` default), confirming misses once before reporting `context_recall_missing` |
 | `model_fingerprint` | Opt-in (`identity`) | Compares answer distributions against a calibrated holdout baseline; abstains on expired, incomplete, incompatible, or low-margin samples |
 | `numeric_fingerprint` | Auto; optional `numericFingerprint` override | Uses the shipped SHA-256-pinned reference (30-day age limit) for closed-set ranking; no runtime data downloads |
@@ -369,7 +369,7 @@ lmspeed-audit list [--format json]
 | `--key-env` | `PROVIDER_API_KEY` | Environment variable name holding the target credential |
 | `--allow-private` | `false` | Permits plain HTTP and private/loopback addresses for local targets |
 | `--thinking` | `false` | Declares extended thinking support in input capabilities |
-| `--context-tokens` | — | Declared context size recorded alongside the automatic scan |
+| `--context-tokens` | — | Publisher context window in tokens. Enables targeted verification |
 | `--max-requests` | `200` | Maximum HTTP requests shared across target, reference, and judge calls |
 | `--max-input-tokens` | `2000000` | Maximum estimated input token budget (`ceil(body.length / 4)`) |
 | `--max-response-bytes` | `4000000` | Maximum bytes buffered per HTTP response |
