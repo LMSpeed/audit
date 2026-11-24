@@ -116,12 +116,12 @@ export const RELAY_AUDIT_STEP_DEFINITIONS = [
     isolation: 'heavy',
     scope: 'model',
     target: 'model',
-    titleZh: '上下文窗口',
-    titleEn: 'Context window',
+    titleZh: '上下文窗口与召回',
+    titleEn: 'Context window and recall',
     descriptionZh:
-      '有官方规格时，校准后抽测接近官方窗口的输入并验证标记召回。缺少规格时，测量接口接受的输入字符范围。',
+      '用同一批请求测量接口接受的输入长度和各位置的标记召回。有官方规格时，校准后抽测接近官方窗口的输入。',
     descriptionEn:
-      'Calibrates and checks marker recall near the published context window. Without a reference, measures the character range accepted by the endpoint.',
+      'Measures accepted input length and marker recall by position in the same requests, targeting the published window when a reference is available.',
   },
   {
     id: 'tool_substitution',
@@ -245,6 +245,14 @@ export const DEFAULT_RELAY_AUDIT_STEP_IDS = RELAY_AUDIT_STEP_DEFINITIONS.filter(
   (step) => !('automatic' in step) || step.automatic
 ).map((step) => step.id);
 
+export function mergeContextAuditSteps<StepId extends string>(
+  stepIds: StepId[]
+): StepId[] {
+  return stepIds.some((id) => id === 'context_window')
+    ? stepIds.filter((id) => id !== 'context_recall')
+    : stepIds;
+}
+
 export const RELAY_AUDIT_STEP_SLUGS = RELAY_AUDIT_STEP_DEFINITIONS.map(
   (step) => step.slug
 );
@@ -325,5 +333,7 @@ export function normalizeRequestedRelayAuditStepIds(
     requested.add(value);
   }
 
-  return RELAY_AUDIT_STEP_IDS.filter((id) => requested.has(id));
+  return mergeContextAuditSteps(
+    RELAY_AUDIT_STEP_IDS.filter((id) => requested.has(id))
+  );
 }

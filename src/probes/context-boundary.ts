@@ -153,10 +153,14 @@ export async function probeContextBoundary(
         ['answer', 'safety_refusal', 'incomplete'].includes(response.outcome) &&
         response.status >= 200 &&
         response.status < 300;
-      const recalled =
+      const markerRecall =
         response.outcome === 'answer'
-          ? facts.every((fact) => response.text.includes(fact))
+          ? facts.map((fact, index) => ({
+              position: index / (facts.length - 1),
+              found: response.text.includes(fact),
+            }))
           : null;
+      const recalled = markerRecall?.every((marker) => marker.found) ?? null;
       const rejected = contextRejected(response);
       trials.push({
         size: prompt.length,
@@ -173,6 +177,7 @@ export async function probeContextBoundary(
         outcome: response.outcome,
         accepted,
         recalled,
+        markerRecall,
         rejected,
         reportedInputTokens: response.usage.total,
         reason: response.reason,

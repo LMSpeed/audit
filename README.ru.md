@@ -444,12 +444,20 @@ flowchart LR
 
 ## Благодарности
 
-- **[LMSpeed](https://lmspeed.net/ru)** — платформа измерения скорости и качества LLM API, сопровождающая `@lmspeed/audit`.
-- **[lm-detector](https://github.com/Ikaleio/lm-detector) и [lmfpd-sdk](https://www.npmjs.com/package/lmfpd-sdk)** — компоненты под MIT для проверки банка токенизаторов, байесовского планирования и локального ранжирования числовых отпечатков. Уведомления сохранены в [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
-- **Открытые протоколы и исследования** — спецификации OpenAI, Anthropic, WHATWG SSE, исследования защиты от Web3 prompt injection (`arXiv:2604.08407`) и открытые подходы проектов `LLMprobe-engine`, `Veridrop`, `meow-llm-detector`.
+[LMSpeed](https://lmspeed.net/ru) сопровождает `@lmspeed/audit`.
+
+| Проверка | Вклад исходных проектов | Реализация Audit |
+| --- | --- | --- |
+| Отпечаток токенизатора | **Код и данные под MIT.** Audit адаптирует формат банка токенизаторов, расчёт апостериорных вероятностей и адаптивный выбор проб из [lm-detector `70159b7`](https://github.com/Ikaleio/lm-detector/tree/70159b7536a2ceb55c478c8c9472da81d3627e59) и включает его банк токенизаторов в пакет. | Запросы к API, считывание числа входных токенов, повторные контрольные измерения и отказ от вывода при нестабильных измерениях или недостаточной уверенности. [Проба токенизатора](https://github.com/lmspeed/audit/blob/main/src/identity/tokenizer.ts) |
+| Предварительная проверка числового отпечатка | **Зависимость и данные под MIT.** [lmfpd-sdk `0.2.0`](https://www.npmjs.com/package/lmfpd-sdk/v/0.2.0) генерирует числовые задания и локально оценивает ответы. `lm-detector` предоставляет детектор и метаданные эталонного банка. | Проверка SHA-256, срока действия и охвата моделей, сбор ответов и представление результата как рейтинга внутри эталонного набора. [Числовая проба](https://github.com/lmspeed/audit/blob/main/src/identity/numeric.ts) |
+| Отпечаток распределения ответов | **Методические источники.** [meow-llm-detector](https://github.com/chen-006/meow-llm-detector) (PolyForm Noncommercial 1.0.0) послужил ориентиром для повторного сбора ответов и оценки по предиктивному правдоподобию модели Дирихле–мультиномиального распределения. V3H из [LLMprobe-engine](https://github.com/Bazaarlinkorg/LLMprobe-engine) (лицензия в метаданных пакета `AGPL-3.0-only`) послужила ориентиром для порогов соответствия и достаточности данных. | Оценка на TypeScript, независимый сбор обучающих и отложенных выборок для кандидатов и внешнего контроля, калибровка порогов соответствия и различимости. [Оценка распределений](https://github.com/lmspeed/audit/blob/main/src/identity/distribution.ts) · [Сбор эталонов](https://github.com/lmspeed/audit/blob/main/src/identity/collect.ts) |
+| Безопасность промптов, утечки в ошибках и целостность потоков | **Методический источник.** [api-relay-audit `040676c`](https://github.com/toby-bridges/api-relay-audit/tree/040676c30f2b757f78ea0e685eb01627de97d2cf) (версия под MIT до смены лицензии) послужил ориентиром при выборе сценариев проверки. | Контрольные пробы со случайными защищёнными значениями, проверка ответов об ошибках на утечки, а также проверка событий и завершения потока SSE. [Проверки промптов](https://github.com/lmspeed/audit/blob/main/src/probes/prompt-security.ts) · [Проверки ошибок и потоков](https://github.com/lmspeed/audit/blob/main/src/probes/boundaries.ts) |
+| Структурированные вызовы инструментов и вывод JSON | **Методический источник.** [Veridrop](https://github.com/canarybyte/veridrop) (GNU AGPL v3) послужил ориентиром для проверок, которые отправляют реальные запросы на вызов инструментов и на вывод по строгой JSON Schema. | Контрольные сценарии с обязательным вызовом, запретом вызова и необъявленными инструментами. Локальная проверка типов и значений полей JSON и отсутствия лишних полей. [Проверки возможностей API](https://github.com/lmspeed/audit/blob/main/src/probes/capabilities.ts) |
+
+Audit также реализует планирование проб, лимиты запросов и токенов, скрытие учётных данных и формирование отчётов. Проверки протоколов следуют спецификациям OpenAI, Anthropic и WHATWG SSE. Проверки инъекций в промпты опираются на `arXiv:2604.08407`.
 
 ---
 
 ## Лицензия
 
-Проект распространяется по **[Apache License, Version 2.0](./LICENSE)** (`Apache-2.0`). Авторство и сохранённые уведомления MIT см. в [`NOTICE`](./NOTICE) и [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+Собственный код LMSpeed Audit распространяется по **[Apache License, Version 2.0](./LICENSE)** (`Apache-2.0`). Адаптированный код `lm-detector`, включённые в пакет эталонные файлы и зависимость `lmfpd-sdk` сохраняют лицензию MIT. Сведения об авторских правах и лицензиях приведены в [`NOTICE`](./NOTICE) и [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).

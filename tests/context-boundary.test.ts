@@ -19,6 +19,62 @@ const input = (): AuditInput => ({
 const options = { networkPolicy: 'local' as const };
 
 describe('user measures context admission separately from long-input recall', () => {
+  it('user runs a single fixed-length sample when both context modes are selected', async () => {
+    // Given a fixed sample length and no published context reference.
+    const auditInput = {
+      ...input(),
+      probes: ['context_recall', 'context_window'],
+      context: { sizes: [512] },
+    };
+    // When the user selects both context modes in one audit.
+    const report = await runAudit(auditInput, {
+      ...options,
+      probeConcurrency: 2,
+    });
+    // Then the report keeps one context result and charges one model request.
+    expect(report.coverage.requested).toEqual(['context_window']);
+    expect(report.usage.requests).toBe(1);
+    expect(report.probes[0]).toMatchObject({
+      id: 'context_window',
+      observations: {
+        trials: [{ size: 512 }],
+        contextVerification: { reason: 'reference_missing' },
+      },
+    });
+  });
+
+  it('user sees which positions were recalled in the same sample that verifies the input limit', async () => {
+    // Given a published window and an endpoint that drops the first marker at large input sizes.
+    relay.contextTokensPerCharacter = 0.65;
+    relay.recallLimit = 20000;
+    const auditInput = {
+      ...input(),
+      probes: ['context_window', 'context_recall'],
+      capabilities: { contextWindowTokens: 32000 },
+    };
+    // When the user checks the context window and recall together.
+    const report = await runAudit(auditInput, options);
+    // Then the near-limit sample reports input admission and exactly which position was missed.
+    expect(report.probes).toHaveLength(1);
+    expect(report.usage.requests).toBe(3);
+    expect(report.probes[0]?.observations).toMatchObject({
+      contextVerification: { verdict: 'fail', reason: 'recall_missing' },
+      trials: expect.arrayContaining([
+        expect.objectContaining({
+          accepted: true,
+          recalled: false,
+          markerRecall: [
+            { position: 0, found: false },
+            { position: 0.25, found: true },
+            { position: 0.5, found: true },
+            { position: 0.75, found: true },
+            { position: 1, found: true },
+          ],
+        }),
+      ]),
+    });
+  });
+
   it('user gets a measured boundary after a temporary upstream disconnect', async () => {
     // Given a relay that drops the first long request and enforces its context limit after reconnecting.
     relay.disconnectAbove = 50000;

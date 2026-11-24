@@ -1,4 +1,4 @@
-import { RELAY_AUDIT_STEP_IDS } from './catalog.js';
+import { mergeContextAuditSteps, RELAY_AUDIT_STEP_IDS } from './catalog.js';
 import { capabilityStep } from './compat/capabilities.js';
 import {
   type RelayAuditEngineOptions,
@@ -96,7 +96,7 @@ export function createAuditPlan(input: AuditInput) {
     )
   )
     throw new Error('Unknown or empty audit probe selection');
-  return requested;
+  return mergeContextAuditSteps(requested);
 }
 async function executeProbe(
   id: string,

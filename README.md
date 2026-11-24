@@ -457,12 +457,20 @@ Documentation is available in three languages. Commands, probe IDs, schema field
 
 ## Credits
 
-- **[LMSpeed](https://lmspeed.net)** — LLM API speed and quality benchmark platform maintaining `@lmspeed/audit`.
-- **[lm-detector](https://github.com/Ikaleio/lm-detector) & [lmfpd-sdk](https://www.npmjs.com/package/lmfpd-sdk)** — MIT-licensed tokenizer bank validation / Bayesian posterior planning and offline numeric candidate ranking (notices preserved in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)).
-- **Protocol & Security Literature** — Streaming and contract checks follow public OpenAI, Anthropic, and WHATWG SSE specifications, Web3 prompt-injection defense literature (`arXiv:2604.08407`), and open verification concepts explored alongside projects such as `LLMprobe-engine`, `Veridrop`, and `meow-llm-detector`.
+[LMSpeed](https://lmspeed.net) maintains `@lmspeed/audit`.
+
+| Check | Upstream contribution | What Audit implements |
+| --- | --- | --- |
+| Tokenizer fingerprint | **MIT code and data.** Audit adapts the tokenizer bank format, Bayesian posterior calculation, and adaptive probe selection from [lm-detector at `70159b7`](https://github.com/Ikaleio/lm-detector/tree/70159b7536a2ceb55c478c8c9472da81d3627e59) and bundles its tokenizer bank. | API requests and input token measurement, repeated control checks for baseline drift, and abstention when the measurements are unstable or inconclusive. [Tokenizer probe](https://github.com/lmspeed/audit/blob/main/src/identity/tokenizer.ts) |
+| Numeric fingerprint screening | **MIT dependency and data.** [lmfpd-sdk `0.2.0`](https://www.npmjs.com/package/lmfpd-sdk/v/0.2.0) generates the numeric challenges and scores the replies offline. `lm-detector` supplies the bundled detector and reference bank metadata. | SHA-256 verification, reference expiry and model coverage checks, response collection, and reporting the result as a ranking within the reference set. [Numeric probe](https://github.com/lmspeed/audit/blob/main/src/identity/numeric.ts) |
+| Model distribution fingerprint | **Method references.** [meow-llm-detector](https://github.com/chen-006/meow-llm-detector) (PolyForm Noncommercial 1.0.0) informed repeated sampling and Dirichlet–multinomial predictive scoring. [LLMprobe-engine](https://github.com/Bazaarlinkorg/LLMprobe-engine) V3H (package metadata declares `AGPL-3.0-only`) informed the minimum-fit and evidence thresholds. | TypeScript scoring, independent collection of training and holdout samples for candidates and an external control, and calibration of the fit and separation thresholds. [Distribution scoring](https://github.com/lmspeed/audit/blob/main/src/identity/distribution.ts) · [Baseline collection](https://github.com/lmspeed/audit/blob/main/src/identity/collect.ts) |
+| Prompt security, error leakage, and stream integrity | **Method reference.** [api-relay-audit at `040676c`](https://github.com/toby-bridges/api-relay-audit/tree/040676c30f2b757f78ea0e685eb01627de97d2cf) (the MIT revision before the license change) informed these check scenarios. | Randomized protected-value controls, evidence checks for sensitive values in error responses, and validation of SSE events and stream termination. [Prompt checks](https://github.com/lmspeed/audit/blob/main/src/probes/prompt-security.ts) · [Error and stream checks](https://github.com/lmspeed/audit/blob/main/src/probes/boundaries.ts) |
+| Structured tool calls and JSON output | **Method reference.** [Veridrop](https://github.com/canarybyte/veridrop) (GNU AGPL v3) informed checks that send real tool-call and strict JSON Schema requests. | Forced, disabled, and undeclared tool-call controls. Local checks verify JSON field types, values, and the absence of extra fields. [Capability probes](https://github.com/lmspeed/audit/blob/main/src/probes/capabilities.ts) |
+
+Audit also implements probe scheduling, request and token budgets, credential redaction, and report assembly. Protocol checks follow the OpenAI, Anthropic, and WHATWG SSE specifications. Prompt-injection checks draw on `arXiv:2604.08407`.
 
 ---
 
 ## License
 
-Licensed under the **[Apache License, Version 2.0](./LICENSE)** (`Apache-2.0`). See [`NOTICE`](./NOTICE) and [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for attribution and retained MIT third-party notices.
+LMSpeed Audit's own code is licensed under the **[Apache License, Version 2.0](./LICENSE)** (`Apache-2.0`). The adapted `lm-detector` code, bundled reference artifacts, and `lmfpd-sdk` dependency retain their MIT license. See [`NOTICE`](./NOTICE) and [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for copyright and license notices.

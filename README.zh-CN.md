@@ -457,12 +457,20 @@ flowchart LR
 
 ## 致谢
 
-- **[LMSpeed](https://lmspeed.net)** — 维护 `@lmspeed/audit` 的 LLM API 速度与质量基准评测平台。
-- **[lm-detector](https://github.com/Ikaleio/lm-detector) 与 [lmfpd-sdk](https://www.npmjs.com/package/lmfpd-sdk)** — 提供遵循 MIT 许可的分词器贝叶斯后验规划及离线数字序列指纹排序实现（完整版权声明见 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)）。
-- **开放协议与安全研究** — 流式分析与行为测试参考公开的 OpenAI、Anthropic、WHATWG SSE 规范、Web3 提示词安全研究（`arXiv:2604.08407`），以及社区在模型核验方向上的公开方法（如 `LLMprobe-engine`、`Veridrop`、`meow-llm-detector`）。
+[LMSpeed](https://lmspeed.net) 维护 `@lmspeed/audit`。
+
+| 检测 | 上游贡献 | Audit 自行实现 |
+| --- | --- | --- |
+| 分词器指纹 | **复用 MIT 代码和数据。** 改编 [lm-detector `70159b7`](https://github.com/Ikaleio/lm-detector/tree/70159b7536a2ceb55c478c8c9472da81d3627e59) 的参考库格式、贝叶斯后验计算和自适应选题，随包分发上游的分词器库。 | 发送探针并读取输入 token 数，使用重复对照检查计数漂移，在计数不稳或置信度不足时弃权。[分词器探针](https://github.com/lmspeed/audit/blob/main/src/identity/tokenizer.ts) |
+| 数字指纹初筛 | **使用 MIT 依赖和数据。** [lmfpd-sdk `0.2.0`](https://www.npmjs.com/package/lmfpd-sdk/v/0.2.0) 生成数字挑战题并离线评分，`lm-detector` 提供随包分发的检测器和参考库元数据。 | SHA-256 完整性校验、参考文件时效和模型覆盖检查、回答采集，以及库内排名报告。[数字指纹探针](https://github.com/lmspeed/audit/blob/main/src/identity/numeric.ts) |
+| 模型分布指纹 | **方法参考。** [meow-llm-detector](https://github.com/chen-006/meow-llm-detector)（PolyForm Noncommercial 1.0.0）提供了重复采样和 Dirichlet–多项式预测似然的思路。[LLMprobe-engine](https://github.com/Bazaarlinkorg/LLMprobe-engine) 的 V3H（包声明为 `AGPL-3.0-only`）提供了最低拟合要求和证据门槛的参考。 | TypeScript 分布评分，从候选模型与外部对照独立采集训练和留出样本，校准拟合度及候选间距门槛。[分布评分](https://github.com/lmspeed/audit/blob/main/src/identity/distribution.ts) · [基线采集](https://github.com/lmspeed/audit/blob/main/src/identity/collect.ts) |
+| 提示词安全、错误泄漏与流完整性 | **方法参考。** [api-relay-audit `040676c`](https://github.com/toby-bridges/api-relay-audit/tree/040676c30f2b757f78ea0e685eb01627de97d2cf)（更改许可证前的 MIT 版本）提供了这些检测场景。 | 随机保护值对照、错误响应中敏感值的证据判定，以及 SSE 事件与结束条件校验。[提示词检测](https://github.com/lmspeed/audit/blob/main/src/probes/prompt-security.ts) · [错误与流检测](https://github.com/lmspeed/audit/blob/main/src/probes/boundaries.ts) |
+| 结构化工具调用与 JSON 输出 | **方法参考。** [Veridrop](https://github.com/canarybyte/veridrop)（GNU AGPL v3）提供了通过实际发送工具调用请求和严格 JSON Schema 验证接口能力的思路。 | 强制工具调用、禁用工具和未声明工具三组对照，以及 JSON 字段类型、值和额外字段的本地校验。[能力探针](https://github.com/lmspeed/audit/blob/main/src/probes/capabilities.ts) |
+
+探针调度、请求和 token 预算、凭据脱敏及报告生成也由 Audit 实现。协议检测遵循 OpenAI、Anthropic 和 WHATWG SSE 的公开规范。提示词注入检测参考 `arXiv:2604.08407`。
 
 ---
 
 ## 许可证
 
-本项目基于 **[Apache License, Version 2.0](./LICENSE)**（`Apache-2.0`）开源。详见 [`LICENSE`](./LICENSE)、[`NOTICE`](./NOTICE) 与 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)。
+LMSpeed Audit 自有代码按 **[Apache License, Version 2.0](./LICENSE)**（`Apache-2.0`）发布。改编自 `lm-detector` 的代码、随包分发的参考文件及 `lmfpd-sdk` 依赖沿用 MIT 许可。版权及许可声明见 [`NOTICE`](./NOTICE) 和 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)。
