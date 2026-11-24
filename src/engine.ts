@@ -22,6 +22,7 @@ import {
 import { probeConditionalInjection } from './probes/conditional.js';
 import { probeInfrastructure } from './probes/infrastructure.js';
 import { probeQuality, probeQualityComparison } from './probes/quality.js';
+import { reviewAuditResult } from './probes/result-review.js';
 import { result as makeResult } from './probes/results.js';
 import type { FetchCompletion } from './protocols/completion.js';
 import { createProbeEvidence } from './protocols/evidence.js';
@@ -351,6 +352,10 @@ export async function executeAudit(
           reason: errorMessage(signal.reason),
         },
       };
+    if (options.reviewAmbiguousResults && !signal.aborted) {
+      await reviewAuditResult(input, transport.fetch, probe, scrub);
+    }
+    workSignal.throwIfAborted();
     await complete(
       JSON.parse(scrub(JSON.stringify(evidence.attach(probe)))) as ProbeResult
     );

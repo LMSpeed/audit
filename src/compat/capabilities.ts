@@ -18,16 +18,19 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
       : probe.verdict === 'inconclusive'
         ? 'unknown'
         : 'safe';
-  const contextSummary =
-    probe.id === 'context_window'
+  const observedSummary =
+    probe.id === 'context_window' ||
+    (probe.id === 'web3_prompt_injection' &&
+      (probe.observations.assessmentReason === 'walletReviewPass' ||
+        probe.observations.assessmentReason === 'walletReviewFail'))
       ? {
           zh: getAuditAssessmentMessage(probe.observations, 'zh'),
           en: getAuditAssessmentMessage(probe.observations, 'en'),
         }
       : null;
   const explanation =
-    contextSummary?.zh && contextSummary.en
-      ? { zh: contextSummary.zh, en: contextSummary.en }
+    observedSummary?.zh && observedSummary.en
+      ? { zh: observedSummary.zh, en: observedSummary.en }
       : probe.verdict === 'finding'
         ? {
             zh: '发现契约差异，请结合证据复核。',

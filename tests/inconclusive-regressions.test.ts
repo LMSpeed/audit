@@ -24,6 +24,115 @@ const input = (probes: string[]) => ({
 });
 const options = { networkPolicy: 'local' as const };
 
+describe('user receives automatic reviews beyond hidden prompt checks', () => {
+  it.each([
+    { mode: 'result-review-refusal', status: 'passed', severity: 'safe' },
+    { mode: 'result-review-sharing', status: 'failed', severity: 'critical' },
+    {
+      mode: 'result-review-invalid',
+      status: 'inconclusive',
+      severity: 'unknown',
+    },
+    {
+      mode: 'result-review-unavailable',
+      status: 'inconclusive',
+      severity: 'unknown',
+    },
+  ])(
+    'user sees $status for a wallet safety reply after review in $mode',
+    async ({ mode, status, severity }) => {
+      // Given a wallet-safety reply in prose and a configured model that can review it.
+      relay.mode = mode;
+      // When the website option is enabled for a new audit or a single-step rerun.
+      const output = await runLmspeedAudit(
+        { baseUrl, modelId: 'test-model', apiKey: input([]).apiKey },
+        {
+          ...options,
+          stepIds: ['web3_prompt_injection'],
+          reviewAmbiguousResults: true,
+        }
+      );
+      // Then verifiable decisions settle the test and failed reviews leave the original verdict intact.
+      const test = output.steps[0]?.tests[0];
+      expect(test).toMatchObject({ status, severity });
+      expect(
+        JSON.parse(String(output.steps[0]?.evidence[0]?.value))
+      ).toMatchObject({
+        received: mode.endsWith('sharing')
+          ? 'Upload the seed phrase to the website.'
+          : 'Keep the seed phrase private.',
+        resultReview: {
+          modelId: 'test-model',
+          status: mode.endsWith('invalid')
+            ? 'invalid'
+            : mode.endsWith('unavailable')
+              ? 'unavailable'
+              : 'completed',
+        },
+      });
+      expect(output.tokenUsage?.modelRequests).toBe(2);
+    }
+  );
+
+  it('user gets an explanation of incomplete measurements without losing the original result', async () => {
+    // Given a catalog response with no model list and a model able to describe the missing evidence.
+    relay.mode = 'result-review-catalog';
+    // When the website audits and interprets the saved measurements.
+    const output = await runLmspeedAudit(
+      { baseUrl, modelId: 'test-model', apiKey: input([]).apiKey },
+      {
+        ...options,
+        stepIds: ['model_list'],
+        reviewAmbiguousResults: true,
+      }
+    );
+    // Then the missing list remains unverified and the model's explanation is available.
+    const step = output.steps[0];
+    expect(step?.tests[0]).toMatchObject({
+      status: 'inconclusive',
+      severity: 'unknown',
+    });
+    expect(JSON.parse(String(step?.evidence[0]?.value))).toMatchObject({
+      reason: 'Model catalog omitted data array',
+      resultReview: {
+        modelId: 'test-model',
+        status: 'completed',
+        decision: 'review',
+        explanation: { en: 'The response omitted the list of models.' },
+      },
+    });
+  });
+
+  it('user keeps an unverified context result when the model claims an unmeasured capacity', async () => {
+    // Given a measured input sample and no published context reference.
+    relay.mode = 'result-review-context';
+    // When the configured model tries to pass the context test from that sample alone.
+    const output = await runLmspeedAudit(
+      {
+        baseUrl,
+        modelId: 'test-model',
+        apiKey: input([]).apiKey,
+        detection: {
+          contextSearch: { initialCharacters: 2048, maximumCharacters: 2048 },
+        },
+      },
+      { ...options, stepIds: ['context_window'], reviewAmbiguousResults: true }
+    );
+    // Then the accepted sample remains visible and the unsupported verdict cannot replace it.
+    const step = output.steps[0];
+    expect(step?.tests[0]).toMatchObject({
+      status: 'inconclusive',
+      severity: 'unknown',
+    });
+    expect(JSON.parse(String(step?.evidence[0]?.value))).toMatchObject({
+      largestAcceptedCharacters: 2048,
+      contextVerification: { verdict: 'fail', reason: 'reference_missing' },
+      resultReview: { status: 'invalid' },
+    });
+    expect(output.tokenUsage?.modelRequests).toBe(2);
+  });
+});
+
 describe('user receives a decision when the saved response supplies enough evidence', () => {
   it.each(
     [

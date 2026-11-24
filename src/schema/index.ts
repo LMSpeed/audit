@@ -153,6 +153,7 @@ export type AuditEvent = {
 export type AuditOptions = {
   signal?: AbortSignal;
   reviewPromptDisclosure?: boolean;
+  reviewAmbiguousResults?: boolean;
   onEvent?: (event: AuditEvent) => void | Promise<void>;
   networkPolicy?: 'public' | 'local';
   probeConcurrency?: number;
