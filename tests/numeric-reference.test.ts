@@ -3,6 +3,44 @@ import { matchNumericReference } from '../src/identity/numeric-reference.js';
 
 // Ambiguous labels and normalization collisions are algorithm boundaries, not model-generation behavior.
 describe('user resolves only explicitly declared numeric reference names', () => {
+  it('user can find a hyphenated Claude reference using the dotted version', () => {
+    // Given an independently supplied bank with an API-style Claude model ID.
+    const models = [{ id: 'claude-sonnet-5-5', response_count: 12 }];
+    // When the user selects the same model with a dotted version.
+    const result = matchNumericReference(models, 'claude-sonnet-5.5');
+    // Then the original reference ID is preserved for ranking comparisons.
+    expect(result).toMatchObject({
+      kind: 'matched',
+      match: { referenceModelId: 'claude-sonnet-5-5', responseCount: 12 },
+    });
+  });
+  it.each([
+    ['claude-opus-5.5', 'claude-opus-5-6'],
+    ['claude-opus-5.5', 'claude-opus-5-5-thinking'],
+    ['claude-opus-5.5', 'claude-opus-5-5-20261119'],
+    ['gpt-6.1-sol', 'gpt-6-1-sol'],
+  ])('user keeps %s separate from %s', (referenceId, modelId) => {
+    // Given a bank with one reference carrying samples.
+    const models = [{ id: referenceId, response_count: 12 }];
+    // When the requested ID differs beyond Claude's version separator.
+    const result = matchNumericReference(models, modelId);
+    // Then the check cannot borrow samples for a different or undeclared ID.
+    expect(result).toEqual({ kind: 'missing' });
+  });
+  it('user sees ambiguity when both Claude version spellings name separate sampled groups', () => {
+    // Given a bank where both spellings carry separate samples.
+    const models = ['claude-opus-5.5', 'claude-opus-5-5'].map((id) => ({
+      id,
+      response_count: 12,
+    }));
+    // When the user selects that model.
+    const result = matchNumericReference(models, 'claude-opus-5-5');
+    // Then the conflicting samples are reported without choosing one group.
+    expect(result).toEqual({
+      kind: 'ambiguous',
+      candidates: ['claude-opus-5.5', 'claude-opus-5-5'],
+    });
+  });
   it('user does not mistake a free-form description for a reference alias', () => {
     // Given a descriptive label mentioning another model without an anchored combined-group declaration.
     const models = [

@@ -414,6 +414,10 @@ describe('user receives a decision when the saved response supplies enough evide
     [{ reason: 'Audit duration budget exceeded' }, 'requestTimedOut'],
     [{ reason: 'baseline_required' }, 'referenceRequired'],
     [{ reason: 'numeric_model_reference_missing' }, 'modelReferenceMissing'],
+    [
+      { reason: 'tokenizer_model_reference_missing' },
+      'tokenizerReferenceMissing',
+    ],
     [{ reason: 'stale_tokenizer_bank' }, 'referenceExpired'],
     [{ outcome: 'unparseable' }, 'unparseableResponse'],
     [{ outcome: 'incomplete' }, 'incompleteResponse'],

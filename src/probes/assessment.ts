@@ -7,6 +7,7 @@ export type AuditAssessmentReason =
   | 'requestTimedOut'
   | 'referenceRequired'
   | 'modelReferenceMissing'
+  | 'tokenizerReferenceMissing'
   | 'modelReferenceAmbiguous'
   | 'numericRankingOnly'
   | 'referenceExpired'
@@ -48,13 +49,12 @@ export function getAuditInconclusiveReason(
     )
       return 'referenceRequired';
     if (
-      [
-        'numeric_model_reference_missing',
-        'tokenizer_model_reference_missing',
-        'unknown_claim',
-      ].includes(reason)
+      reason === 'numeric_model_reference_missing' ||
+      reason === 'unknown_claim'
     )
       return 'modelReferenceMissing';
+    if (reason === 'tokenizer_model_reference_missing')
+      return 'tokenizerReferenceMissing';
     if (reason === 'numeric_model_reference_ambiguous')
       return 'modelReferenceAmbiguous';
     if (
@@ -131,6 +131,10 @@ const assessmentMessages: Record<string, { en: string; zh: string }> = {
   modelReferenceMissing: {
     en: 'The reference bank has no usable fingerprint data for this model. The check was skipped without sending model requests.',
     zh: '参考库没有当前模型的可用指纹数据，已跳过检测，未发送模型请求。',
+  },
+  tokenizerReferenceMissing: {
+    en: 'The reference bank has no verified tokenizer mapping for this model. The check was skipped without sending model requests.',
+    zh: '参考库缺少该模型经过验证的分词器映射。本项已跳过，未发送模型请求。',
   },
   modelReferenceAmbiguous: {
     en: 'The model name matches multiple reference groups. The check was skipped without sending model requests.',

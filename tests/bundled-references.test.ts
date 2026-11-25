@@ -18,6 +18,47 @@ afterEach(async () => {
 });
 
 describe('user runs fingerprints from the standalone audit package', () => {
+  it.each(['claude-opus-5-5', 'Anthropic/CLAUDE-OPUS-5-5:online'])(
+    'user collects numeric evidence for %s when the reference spells the same version with a dot',
+    async (modelId) => {
+      // Given the packaged numeric bank contains Claude Opus 5.5 samples, while the tokenizer bank has no Claude class.
+      relay.mode = 'numbers';
+      // When the user audits both fingerprints using the provider's model ID.
+      const report = await runAudit(
+        {
+          target: { baseUrl, modelId },
+          apiKey: 'alias-contract-key',
+          probes: ['numeric_fingerprint', 'tokenizer_fingerprint'],
+        },
+        { networkPolicy: 'local' }
+      );
+      // Then numeric screening produces a ranking while only the tokenizer check skips without sampling.
+      const [numeric, tokenizer] = report.probes;
+      expect(numeric).toMatchObject({
+        execution: 'completed',
+        observations: {
+          decision: 'ranked',
+          referenceMatch: {
+            requestedModelId: modelId,
+            referenceModelId: 'claude-opus-5.5',
+            responseCount: 36,
+          },
+        },
+      });
+      expect(tokenizer).toMatchObject({
+        execution: 'skipped',
+        observations: { reason: 'tokenizer_model_reference_missing' },
+      });
+      expect(report.coverage.skipped).toEqual(['tokenizer_fingerprint']);
+      expect(report.usage.requests).toBe(3);
+      expect(relay.received.map(({ body }) => body.model)).toEqual([
+        modelId,
+        modelId,
+        modelId,
+      ]);
+    }
+  );
+
   it.each([
     ['gpt-6.1-sol', 'group_alias'],
     ['OpenAI/GPT-6.1-SOL:online', 'group_alias'],

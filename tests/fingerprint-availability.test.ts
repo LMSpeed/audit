@@ -192,10 +192,10 @@ describe('user skips fingerprint requests without matching reference data', () =
       { baseUrl, modelId: 'unlisted-model', apiKey: 'availability-key' },
       { ...options, stepIds: ['numeric_fingerprint', 'tokenizer_fingerprint'] }
     );
-    // Then both summaries explain the skip while retaining unknown severity and zero consumption.
+    // Then each summary identifies its missing reference while retaining unknown severity and zero consumption.
     expect(output.steps.map((step) => step.summaryZh)).toEqual([
       '参考库没有当前模型的可用指纹数据，已跳过检测，未发送模型请求。',
-      '参考库没有当前模型的可用指纹数据，已跳过检测，未发送模型请求。',
+      '参考库缺少该模型经过验证的分词器映射。本项已跳过，未发送模型请求。',
     ]);
     expect(output.steps.map((step) => step.severity)).toEqual([
       'unknown',

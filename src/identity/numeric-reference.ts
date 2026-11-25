@@ -15,7 +15,15 @@ export type NumericReferenceMatch = {
 };
 
 const normalizeModelId = (value: string) =>
-  value.trim().toLowerCase().replace(/^.*\//, '').replace(/:.*$/, '');
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/^.*\//, '')
+    .replace(/:.*$/, '')
+    .replace(
+      /^(claude-(?:haiku|sonnet|opus|fable|mythos)-\d+)-(\d+)$/,
+      '$1.$2'
+    );
 
 function groupMembers(model: NumericReferenceModel) {
   const id = model.id.trim().toLowerCase();
@@ -33,7 +41,7 @@ function groupMembers(model: NumericReferenceModel) {
       if (/^\d/.test(value)) return prefix ? [`${prefix}${value}`] : [];
       return [value];
     });
-  return [...new Set([normalized, ...aliases])];
+  return [...new Set([normalized, ...aliases.map(normalizeModelId)])];
 }
 
 export function matchNumericReference(
