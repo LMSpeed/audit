@@ -1,3 +1,95 @@
+export function usesMeasuredAuditResult(probeId: string | undefined) {
+  return (
+    probeId === 'instruction_conflict' ||
+    probeId === 'quality_canary' ||
+    probeId === 'context_window'
+  );
+}
+
+const normalizeInstructionReply = (text: string) =>
+  text.replace(/^[\s"'`“”‘’]+|[\s.!?,;:。！？，；：…"'`“”‘’]+$/gu, '');
+
+export function getAuditInstructionOutput(
+  observations: Record<string, unknown>
+) {
+  const { expected, received, instructionOutput } = observations;
+  if (typeof expected !== 'string' || !/^ACK_[A-F0-9]{24}$/.test(expected))
+    return null;
+  if (
+    instructionOutput === 'matched' ||
+    instructionOutput === 'extra_text' ||
+    instructionOutput === 'mismatch'
+  )
+    return instructionOutput;
+  if (typeof received !== 'string') return null;
+  if (normalizeInstructionReply(received) === expected) return 'matched';
+  const markerLine = received
+    .split(/\r?\n/)
+    .some((line) => normalizeInstructionReply(line) === expected);
+  const conflictingAnswer = /\b(?:42|forty[ -]two)\b/i.test(
+    received.replaceAll(expected, '')
+  );
+  return markerLine && !conflictingAnswer ? 'extra_text' : 'mismatch';
+}
+
+export function matchesAuditQualityJson(text: string) {
+  try {
+    const value: unknown = JSON.parse(text);
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      'ok' in value &&
+      value.ok === true &&
+      Object.keys(value).length === 1
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isFencedAuditQualityJson(text: string) {
+  const fenced = /^```(?:json)?[ \t]*\r?\n([\s\S]+?)\r?\n```$/i.exec(
+    text.trim()
+  );
+  return fenced?.[1] !== undefined && matchesAuditQualityJson(fenced[1]);
+}
+
+export function getAuditQualityMeasurement(
+  observations: Record<string, unknown>
+) {
+  const { correct, acquired, scheduled, trials } = observations;
+  if (
+    typeof correct !== 'number' ||
+    !Number.isSafeInteger(correct) ||
+    correct < 0 ||
+    typeof acquired !== 'number' ||
+    !Number.isSafeInteger(acquired) ||
+    acquired <= 0 ||
+    typeof scheduled !== 'number' ||
+    !Number.isSafeInteger(scheduled) ||
+    correct > acquired ||
+    acquired > scheduled
+  )
+    return null;
+  const jsonFormatMismatch =
+    observations.jsonFormatMismatch === true ||
+    (Array.isArray(trials) &&
+      trials.some(
+        (trial: unknown) =>
+          trial !== null &&
+          typeof trial === 'object' &&
+          'id' in trial &&
+          trial.id === 'json' &&
+          'correct' in trial &&
+          trial.correct === false &&
+          'response' in trial &&
+          typeof trial.response === 'string' &&
+          isFencedAuditQualityJson(trial.response)
+      ));
+  return { correct, acquired, scheduled, jsonFormatMismatch };
+}
+
 export type AuditAssessmentReason =
   | 'accessDenied'
   | 'rateLimited'
@@ -409,6 +501,22 @@ export function getAuditAssessmentMessage(
   locale: 'en' | 'zh',
   inconclusive = true
 ) {
+  const instruction = getAuditInstructionOutput(observations);
+  if (instruction === 'extra_text')
+    return locale === 'zh'
+      ? '返回了正确标记，但附带额外文字，输出格式未通过。'
+      : 'The response included the correct marker and extra text, so it failed the output format requirement.';
+  if (instruction === 'mismatch')
+    return locale === 'zh'
+      ? '回复未满足系统指令要求的随机标记输出。'
+      : 'The response did not meet the system instruction’s marker requirement.';
+  const quality = getAuditQualityMeasurement(observations);
+  if (quality) {
+    const { correct, acquired, scheduled, jsonFormatMismatch } = quality;
+    if (locale === 'zh')
+      return `答对 ${correct}/${acquired} 项，计划 ${scheduled} 项。${jsonFormatMismatch ? 'JSON 值正确，Markdown 代码围栏违反了原始 JSON 输出要求。' : ''}`;
+    return `Correct ${correct}/${acquired} tasks, ${scheduled} scheduled.${jsonFormatMismatch ? ' The JSON value was correct, but a Markdown code fence violated the raw JSON output requirement.' : ''}`;
+  }
   const disclosure = getAuditDisclosureAssessmentKey(observations);
   if (disclosure) return assessmentMessages[disclosure]?.[locale] ?? null;
   const verified = getAuditContextVerification(observations);

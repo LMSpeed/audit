@@ -5,6 +5,10 @@ import {
   requestCompletion,
 } from '../protocols/completion.js';
 import type { AuditInput } from '../schema/index.js';
+import {
+  isFencedAuditQualityJson,
+  matchesAuditQualityJson,
+} from './assessment.js';
 import { finding, result, unavailable } from './results.js';
 
 type Task = { id: string; prompt: string; expected: string };
@@ -74,14 +78,7 @@ function correct(task: Task, text: string) {
         .replace(/[.!。！]$/u, '')
         .toLowerCase() === task.expected
     );
-  if (task.id === 'json') {
-    try {
-      const value = object(JSON.parse(text));
-      return value.ok === true && Object.keys(value).length === 1;
-    } catch {
-      return false;
-    }
-  }
+  if (task.id === 'json') return matchesAuditQualityJson(text);
   return text.trim().toLowerCase() === task.expected.toLowerCase();
 }
 export async function probeQuality(input: AuditInput, fetch: FetchCompletion) {
@@ -121,6 +118,12 @@ export async function probeQuality(input: AuditInput, fetch: FetchCompletion) {
       acquired,
       correct: passed,
       score: acquired ? passed / acquired : null,
+      jsonFormatMismatch: trials.some(
+        (trial) =>
+          trial.id === 'json' &&
+          trial.correct === false &&
+          isFencedAuditQualityJson(trial.response)
+      ),
       attribution:
         'Task correctness only; not model identity or a general capability benchmark.',
     },

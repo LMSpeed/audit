@@ -401,5 +401,34 @@ describe('user measures context admission separately from long-input recall', ()
       verdict: 'fail',
       reason: 'token_usage_inconsistent',
     });
+    expect(report.usage.requests).toBe(2);
+    expect(
+      report.probes[0]?.observations.largestAcceptedInputTokens
+    ).toBeNull();
+  });
+
+  it('user reaches the published context target after confirming an anomalous calibration', async () => {
+    // Given a gateway reporting an implausible first token count and consistent counts afterwards.
+    relay.mode = 'context-inflated-once';
+    relay.contextTokensPerCharacter = 0.65;
+    // When the audit checks the published limit using the short calibration sample.
+    const report = await runAudit(
+      {
+        ...input(),
+        contextSearch: { initialCharacters: 32768 },
+        capabilities: { contextWindowTokens: 100000 },
+      },
+      options
+    );
+    // Then a bounded confirmation enables verification using coherent counts and retained recall evidence.
+    expect(report.probes[0]?.observations).toMatchObject({
+      contextVerification: { verdict: 'pass', reason: 'target_recalled' },
+      trials: [
+        { phase: 'calibration', reportedInputTokens: 36621 },
+        { phase: 'calibration_confirmation', reportedInputTokens: 21300 },
+        { phase: 'target_verification', recalled: true },
+      ],
+    });
+    expect(report.usage.requests).toBe(3);
   });
 });

@@ -13,6 +13,7 @@ Automated scenarios exercise the public audit entrypoint through a real loopback
 - Given JSON and SSE model responses, when an audit finishes or saves a completed step, then reported input/output Token totals and separate per-direction coverage survive SDK, compatibility and stored-report boundaries. Cumulative stream usage is counted once, cache input is not counted twice, reasoning is already included in output, and missing usage remains unknown rather than zero. Request-size estimates remain separate budget fields.
 - Given an empty explicit refusal or unsolicited SSE, when a user audits an endpoint, then the outcome is classified without protocol fallback, retries or scoring it as an ordinary answer.
 - Given deterministic math, logic, format, recall and code checks, when a user audits quality, then the report records each answer and a bounded aggregate without inferring model identity.
+- Given the correct system marker with explanatory prose or the correct JSON value inside a Markdown fence, when the audit measures the response, then the report identifies the specific output-format difference. Instruction priority, quality and context results use the recorded measurements directly.
 - Given a trusted reference endpoint, when a user compares quality, then reference and target share tasks and parameters, acquisition failures stay out of answer scoring, and an optional judge is explicitly configured.
 - Given a fresh baseline collected in independent training and validation batches, when a user requests identity evidence, then matching distributions are distinguished from other reference sources. Stale, incompatible, uncalibrated, incomplete and poorly fitting samples abstain.
 - Given a reference bank without usable data for the selected model, when fingerprint checks run, then they are skipped before any model request, retain an explicit missing-reference reason and never become a pass or finding. Exact supported numeric IDs and known tokenizer mappings still collect evidence; unrelated model versions and unpublished tokenizer mappings cannot substitute for missing data.
@@ -21,6 +22,7 @@ Automated scenarios exercise the public audit entrypoint through a real loopback
 - Given LMSpeed selects a new detector, when the audit runs, then progress, persisted facts and final reports include it through the same engine used by standalone callers.
 
 - Given correctly recovered facts inside a Markdown code block, when recall is audited, then formatting does not become a false missing-fact finding; actual missing markers still fail repeated confirmation.
+- Given an implausible Token count on the first short context calibration, when the request budget allows, then the audit confirms that sample once and uses a plausible count to continue. The original Token count remains in the trial evidence.
 - Given identical visible text with different reasoning-token totals, when streams are compared, then explicitly reported reasoning is removed; missing reasoning breakdowns yield an inconclusive comparison rather than a false metering finding.
 
 ## Core boundary and streaming contracts

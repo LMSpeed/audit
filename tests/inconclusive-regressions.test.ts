@@ -68,6 +68,12 @@ describe('user receives automatic reviews beyond hidden prompt checks', () => {
             : mode.endsWith('unavailable')
               ? 'unavailable'
               : 'completed',
+          ...(mode.endsWith('invalid')
+            ? { reason: 'invalid_excerpt', httpStatus: 200 }
+            : {}),
+          ...(mode.endsWith('unavailable')
+            ? { reason: 'http_error', httpStatus: 503 }
+            : {}),
         },
       });
       expect(output.tokenUsage?.modelRequests).toBe(2);
@@ -103,8 +109,8 @@ describe('user receives automatic reviews beyond hidden prompt checks', () => {
     });
   });
 
-  it('user keeps an unverified context result when the model claims an unmeasured capacity', async () => {
-    // Given a measured input sample and no published context reference.
+  it('user receives measured context evidence without a second opinion from the tested gateway', async () => {
+    // Given a measured input sample and a gateway that would claim an unmeasured capacity if asked.
     relay.mode = 'result-review-context';
     // When the configured model tries to pass the context test from that sample alone.
     const output = await runLmspeedAudit(
@@ -118,7 +124,7 @@ describe('user receives automatic reviews beyond hidden prompt checks', () => {
       },
       { ...options, stepIds: ['context_window'], reviewAmbiguousResults: true }
     );
-    // Then the accepted sample remains visible and the unsupported verdict cannot replace it.
+    // Then the accepted sample remains visible without paying for an interpretation that cannot validate capacity.
     const step = output.steps[0];
     expect(step?.tests[0]).toMatchObject({
       status: 'inconclusive',
@@ -127,13 +133,42 @@ describe('user receives automatic reviews beyond hidden prompt checks', () => {
     expect(JSON.parse(String(step?.evidence[0]?.value))).toMatchObject({
       largestAcceptedCharacters: 2048,
       contextVerification: { verdict: 'fail', reason: 'reference_missing' },
-      resultReview: { status: 'invalid' },
     });
-    expect(output.tokenUsage?.modelRequests).toBe(2);
+    expect(output.tokenUsage?.modelRequests).toBe(1);
+  });
+
+  it('user sees a measured score and a format-only JSON failure without a model review', async () => {
+    // Given ten answers with exactly the expected JSON value inside a Markdown code fence.
+    relay.mode = 'quality-json-fence';
+    // When the user evaluates the quality tasks with automatic review enabled.
+    const report = await runAudit(input(['quality_canary']), {
+      ...options,
+      reviewAmbiguousResults: true,
+    });
+    // Then the report records the strict-format failure and the score directly.
+    expect(report.probes[0]?.observations).toMatchObject({
+      correct: 9,
+      acquired: 10,
+      jsonFormatMismatch: true,
+    });
+    expect(report.usage.requests).toBe(10);
   });
 });
 
 describe('user receives a decision when the saved response supplies enough evidence', () => {
+  it('user retains the measured instruction output result when the reply was truncated in storage', () => {
+    // Given a saved audit with the measured marker result and a shortened reply.
+    const observations = {
+      expected: 'ACK_21FF833D63A4264760392FD3',
+      received: 'The system instruction takes precedence. [truncated]',
+      instructionOutput: 'extra_text',
+    };
+    // When the SDK displays the saved result.
+    const message = getAuditAssessmentMessage(observations, 'zh');
+    // Then the recorded format difference is retained without reclassifying the shortened text.
+    expect(message).toContain('返回了正确标记');
+  });
+
   it.each(
     [
       [],

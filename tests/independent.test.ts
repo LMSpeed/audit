@@ -27,6 +27,23 @@ const run = (
   );
 
 describe('user receives independently specified audit evidence', () => {
+  it('user sees a format mismatch when the system marker is returned with an explanation', async () => {
+    // Given a completion that explains system priority and then returns the exact marker on its own line.
+    relay.mode = 'format-instruction';
+    relay.instructionPrefix =
+      'The system instructions take precedence.\n\nThe decoded content is:\n\n';
+    // When the user runs the priority challenge using the Messages protocol.
+    const report = await run(['instruction_conflict'], 'anthropic');
+    // Then the exact-output contract fails without reporting a missing system marker.
+    expect(report.probes[0]?.observations).toMatchObject({
+      matched: false,
+      instructionOutput: 'extra_text',
+    });
+    expect(report.findings.map(({ code }) => code)).toEqual([
+      'system_output_format_mismatch',
+    ]);
+  });
+
   it.each(['openai', 'anthropic', 'responses'] as const)(
     'user receives an unambiguous expected literal in the %s priority challenge',
     async (protocol) => {

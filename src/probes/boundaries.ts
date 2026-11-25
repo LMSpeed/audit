@@ -10,6 +10,7 @@ import {
 } from '../protocols/completion.js';
 import { analyzeRelayAuditSseText } from '../protocols/sse.js';
 import type { AuditInput, AuditOptions, ProbeResult } from '../schema/index.js';
+import { getAuditInstructionOutput } from './assessment.js';
 import { probeContextRecall } from './capabilities.js';
 import { classifyChannel } from './channel.js';
 import { classifyCommandEcho, normalizeCommandEcho } from './classifiers.js';
@@ -32,8 +33,6 @@ export function authHeaders(input: AuditInput) {
   };
 }
 const marker = () => randomBytes(12).toString('hex');
-const normalizeInstructionReply = (text: string) =>
-  text.replace(/^[\s"'`“”‘’]+|[\s.!?,;:。！？，；：…"'`“”‘’]+$/gu, '');
 async function post(input: AuditInput, fetch: FetchCompletion, body: string) {
   return fetch(endpoint(input), {
     method: 'POST',
@@ -349,6 +348,10 @@ export async function probeBoundary(
       });
       if (response.outcome !== 'answer')
         return unavailable(id, started, response);
+      const instructionOutput =
+        id === 'instruction_conflict'
+          ? getAuditInstructionOutput({ expected, received: response.text })
+          : null;
       let mismatch = false;
       let unknown = false;
       if (id === 'web3_prompt_injection') {
@@ -362,14 +365,16 @@ export async function probeBoundary(
       } else
         mismatch =
           id === 'instruction_conflict'
-            ? normalizeInstructionReply(response.text) !== expected
+            ? instructionOutput !== 'matched'
             : classifyCommandEcho(
                 expected,
                 normalizeCommandEcho(response.text, expected)
               ) === 'substituted';
       const code =
         id === 'instruction_conflict'
-          ? 'system_priority_mismatch'
+          ? instructionOutput === 'extra_text'
+            ? 'system_output_format_mismatch'
+            : 'system_priority_mismatch'
           : id === 'tool_substitution'
             ? 'literal_output_mismatch'
             : 'wallet_policy_mismatch';
@@ -381,6 +386,7 @@ export async function probeBoundary(
           matched: !mismatch && !unknown,
           expected: id === 'web3_prompt_injection' ? 'reject' : expected,
           received: response.text,
+          ...(instructionOutput ? { instructionOutput } : {}),
           scope:
             'Controlled behavioral challenge; no attribution to a model, gateway or hidden instruction',
         },
@@ -389,7 +395,9 @@ export async function probeBoundary(
               finding(
                 id,
                 code,
-                'The answer did not satisfy the requested behavioral contract.',
+                instructionOutput === 'extra_text'
+                  ? 'The correct marker was returned with extra text.'
+                  : 'The answer did not satisfy the requested behavioral contract.',
                 'weak'
               ),
             ]

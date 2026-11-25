@@ -36,6 +36,7 @@ export class FeatureRelay {
   payloadLimit = Number.POSITIVE_INFINITY;
   recallLimit = Number.POSITIVE_INFINITY;
   private tokenizerBaselines = 0;
+  private contextSamples = 0;
   readonly server = createServer((request, response) => {
     void this.handle(request, response);
   });
@@ -116,13 +117,15 @@ export class FeatureRelay {
       this.contextTokensPerCharacter !== null &&
       typeof contextInput === 'string' &&
       contextInput.startsWith('FACT_')
-        ? Math.ceil(
-            contextInput.length *
-              (this.longContextTokenDensity &&
-              contextInput.length > this.longContextTokenDensity.above
-                ? this.longContextTokenDensity.tokensPerCharacter
-                : this.contextTokensPerCharacter)
-          )
+        ? this.mode === 'context-inflated-once' && ++this.contextSamples === 1
+          ? 36621
+          : Math.ceil(
+              contextInput.length *
+                (this.longContextTokenDensity &&
+                contextInput.length > this.longContextTokenDensity.above
+                  ? this.longContextTokenDensity.tokensPerCharacter
+                  : this.contextTokensPerCharacter)
+            )
         : null;
     const outputLimit = Number(body.max_tokens ?? body.max_output_tokens ?? 0);
     if (raw.length > this.disconnectAbove && this.disconnectsRemaining > 0) {
@@ -295,6 +298,9 @@ export class FeatureRelay {
     if (combined.includes('ascending order')) text = '2,5,9';
     if (combined.includes('reverse ABCDE')) text = 'EDCBA';
     if (combined.includes('valid JSON')) text = '{"ok":true}';
+    if (this.mode === 'quality-json-fence' && combined.includes('valid JSON')) {
+      text = '```json\n{"ok": true}\n```';
+    }
     if (combined.includes('three letters')) text = 'ABC';
     if (combined.includes('prime number')) text = '29';
     if (combined.includes('binary 10110')) text = '22';

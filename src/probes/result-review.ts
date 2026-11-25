@@ -5,6 +5,7 @@ import {
   requestCompletion,
 } from '../protocols/completion.js';
 import type { AuditInput, ProbeResult } from '../schema/index.js';
+import { usesMeasuredAuditResult } from './assessment.js';
 import { finding } from './results.js';
 
 const evidenceLimit = 4096;
@@ -17,7 +18,11 @@ export async function reviewAuditResult(
   probe: ProbeResult,
   scrub: (text: string) => string
 ) {
-  if (probe.id === 'prompt_extraction' || probe.id === 'jailbreak_identity')
+  if (
+    usesMeasuredAuditResult(probe.id) ||
+    probe.id === 'prompt_extraction' ||
+    probe.id === 'jailbreak_identity'
+  )
     return;
   const definition = getRelayAuditStepById(probe.id);
   if (!definition) return;
@@ -84,9 +89,9 @@ export async function reviewAuditResult(
     }
   );
   const reviews =
-    response.outcome === 'answer' ? parseReviews(response.text) : [];
+    response.outcome === 'answer' ? parseReviews(response.text) : null;
   for (const { check, sample, canDecide } of candidates) {
-    const matches = reviews.filter((entry) => entry.id === sample.id);
+    const matches = reviews?.filter((entry) => entry.id === sample.id) ?? [];
     const review = matches.length === 1 ? matches[0] : undefined;
     const decision = review?.decision;
     const excerpt =
@@ -100,18 +105,28 @@ export async function reviewAuditResult(
           : [];
       })
     );
-    const valid =
-      (decision === 'review' ||
-        (canDecide && (decision === 'pass' || decision === 'fail'))) &&
-      excerpt.length > 0 &&
-      excerpt.length <= 160 &&
-      sample.evidence.includes(excerpt) &&
-      Boolean(localized.en);
+    const invalidReason = !reviews
+      ? 'invalid_payload'
+      : !review
+        ? 'invalid_check_id'
+        : decision !== 'review' &&
+            !(canDecide && (decision === 'pass' || decision === 'fail'))
+          ? 'invalid_decision'
+          : !excerpt ||
+              excerpt.length > 160 ||
+              !sample.evidence.includes(excerpt)
+            ? 'invalid_excerpt'
+            : !localized.en
+              ? 'invalid_explanation'
+              : null;
     const modelId = input.target.modelId;
-    if (!valid) {
+    if (invalidReason) {
       check.observations.resultReview = {
         modelId,
         status: response.outcome === 'answer' ? 'invalid' : 'unavailable',
+        reason:
+          response.outcome === 'answer' ? invalidReason : response.outcome,
+        httpStatus: response.status,
       };
       continue;
     }
@@ -144,13 +159,13 @@ export async function reviewAuditResult(
   }
 }
 
-function parseReviews(text: string): Record<string, unknown>[] {
+function parseReviews(text: string): Record<string, unknown>[] | null {
   try {
     const reviews = object(
       JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ''))
     ).reviews;
-    return Array.isArray(reviews) ? reviews.map(object) : [];
+    return Array.isArray(reviews) ? reviews.map(object) : null;
   } catch {
-    return [];
+    return null;
   }
 }

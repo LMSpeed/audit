@@ -1,5 +1,8 @@
 import { getRelayAuditStepById } from '../catalog.js';
-import { getAuditAssessmentMessage } from '../probes/assessment.js';
+import {
+  getAuditAssessmentMessage,
+  usesMeasuredAuditResult,
+} from '../probes/assessment.js';
 import {
   createPromptReportColumns,
   formatPromptReportTokens,
@@ -19,7 +22,7 @@ export function capabilityStep(probe: ProbeResult): RelayAuditEngineStep {
         ? 'unknown'
         : 'safe';
   const observedSummary =
-    probe.id === 'context_window' ||
+    usesMeasuredAuditResult(probe.id) ||
     (probe.id === 'web3_prompt_injection' &&
       (probe.observations.assessmentReason === 'walletReviewPass' ||
         probe.observations.assessmentReason === 'walletReviewFail'))

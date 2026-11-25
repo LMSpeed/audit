@@ -98,10 +98,14 @@ export async function probeContextBoundary(
   const maximumRequests =
     input.contextSearch?.maximumRequests ??
     (targetInputTokens === null ? 24 : 5);
+  const maxCalibrationCharacters = 32768;
   const calibrationSize =
     targetInputTokens === null
-      ? 32768
-      : Math.max(256, Math.min(32768, Math.floor(targetInputTokens / 8)));
+      ? maxCalibrationCharacters
+      : Math.max(
+          256,
+          Math.min(maxCalibrationCharacters, Math.floor(targetInputTokens / 8))
+        );
   let size = Math.min(
     maximum,
     input.contextSearch?.initialCharacters ?? calibrationSize
@@ -120,26 +124,33 @@ export async function probeContextBoundary(
   const trials: Array<Record<string, unknown>> = [];
   const accept = (
     length: number,
-    response: Completion,
+    inputTokens: number | null,
     recalled: boolean | null,
     accepted: boolean
   ) => {
-    if (accepted && length > largestAcceptedCharacters) {
+    if (
+      accepted &&
+      (length > largestAcceptedCharacters ||
+        (length === largestAcceptedCharacters &&
+          largestAcceptedInputTokens === null))
+    ) {
       largestAcceptedCharacters = length;
-      largestAcceptedInputTokens = response.usage.total;
+      largestAcceptedInputTokens = inputTokens;
     }
     if (recalled) {
       largestPassedCharacters = Math.max(largestPassedCharacters, length);
-      if (response.usage.total !== null) {
+      if (inputTokens !== null) {
         largestRecalledInputTokens = Math.max(
           largestRecalledInputTokens ?? 0,
-          response.usage.total
+          inputTokens
         );
       }
     }
   };
   while (trials.length < maximumRequests) {
     const { facts, prompt } = challenge(size);
+    // The generated prompt is ASCII. Allow for message framing by the endpoint.
+    const maximumPlausibleTokens = prompt.length + 256;
     const recordAttempt = async (phase: string) => {
       const response = await requestCompletion(input, fetch, {
         prompt,
@@ -162,6 +173,11 @@ export async function probeContextBoundary(
           : null;
       const recalled = markerRecall?.every((marker) => marker.found) ?? null;
       const rejected = contextRejected(response);
+      const reported = response.usage.total;
+      const tokenUsageInconsistent =
+        targetInputTokens !== null &&
+        reported !== null &&
+        reported > maximumPlausibleTokens;
       trials.push({
         size: prompt.length,
         phase,
@@ -182,8 +198,13 @@ export async function probeContextBoundary(
         reportedInputTokens: response.usage.total,
         reason: response.reason,
       });
-      accept(prompt.length, response, recalled, accepted);
-      return { response, accepted, recalled, rejected };
+      accept(
+        prompt.length,
+        tokenUsageInconsistent ? null : reported,
+        recalled,
+        accepted
+      );
+      return { response, accepted, recalled, rejected, tokenUsageInconsistent };
     };
     const attempt = async (phase: string) => {
       const observed = await recordAttempt(phase);
@@ -203,18 +224,19 @@ export async function probeContextBoundary(
         : smallestRejectedCharacters === null && !ambiguousFailure
           ? 'expansion'
           : 'refinement';
-    const observed = await attempt(phase);
-    const reported = observed.response.usage.total;
-    // The generated prompt is ASCII. Allow for message framing by the endpoint.
-    const maximumPlausibleTokens = prompt.length + 256;
+    let observed = await attempt(phase);
     if (
-      targetInputTokens !== null &&
-      reported !== null &&
-      reported > maximumPlausibleTokens
-    ) {
+      phase === 'calibration' &&
+      observed.tokenUsageInconsistent &&
+      prompt.length <= maxCalibrationCharacters &&
+      trials.length < maximumRequests
+    )
+      observed = await recordAttempt('calibration_confirmation');
+    if (observed.tokenUsageInconsistent) {
       stopReason = 'token_usage_inconsistent';
       break;
     }
+    const reported = observed.response.usage.total;
     const firstRejection = smallestRejectedCharacters === null;
     const atTarget =
       minimumInputTokens !== null &&
